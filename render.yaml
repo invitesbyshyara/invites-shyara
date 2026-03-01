@@ -3,7 +3,7 @@ services:
     name: shyara-invite
     runtime: static
     rootDir: frontend
-    buildCommand: npm install && npm run build
+    buildCommand: bun run build
     staticPublishPath: dist
     envVars:
       - key: VITE_STRIPE_PUBLISHABLE_KEY
