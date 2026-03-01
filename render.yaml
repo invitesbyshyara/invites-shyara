@@ -2,7 +2,7 @@ services:
   - type: web
     name: shyara-invite
     runtime: static
-    rootDir: frontend/shareable-moments
+    rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
