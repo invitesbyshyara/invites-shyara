@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String        @id @default(cuid())
+  name                String
+  email               String        @unique
+  passwordHash        String?
+  googleId            String?       @unique
+  phone               String?
+  avatarUrl           String?
+  plan                UserPlan      @default(free)
+  status              UserStatus    @default(active)
+  emailVerified       Boolean       @default(false)
+  unsubscribeToken    String?       @unique @default(cuid())
+  emailPreferences    Json          @default("{\"rsvpNotifications\": true, \"weeklyDigest\": false, \"marketing\": true}")
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  lastLoginAt         DateTime?
+
+  invites       Invite[]
+  purchases     UserTemplate[]
+  transactions  Transaction[]
+  refreshTokens RefreshToken[]
+}
+
+enum UserPlan {
+  free
+  premium
+}
+
+enum UserStatus {
+  active
+  suspended
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AdminUser {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         AdminRole  @default(support)
+  createdAt    DateTime   @default(now())
+  lastLoginAt  DateTime?
+
+  notes         AdminNote[]
+  announcements Announcement[]
+  auditLogs     AuditLog[]
+}
+
+enum AdminRole {
+  admin
+  support
+}
+
+model Template {
+  slug             String         @id
+  name             String
+  category         EventCategory
+  tags             String[]
+  isPremium        Boolean        @default(false)
+  price            Int            @default(0)
+  priceUsd         Int            @default(0)
+  priceEur         Int            @default(0)
+  isVisible        Boolean        @default(true)
+  isFeatured       Boolean        @default(false)
+  sortOrder        Int            @default(0)
+  purchaseCount    Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  purchases  UserTemplate[]
+  invites    Invite[]
+}
+
+model UserTemplate {
+  id            String    @id @default(cuid())
+  userId        String
+  templateSlug  String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template      Template  @relation(fields: [templateSlug], references: [slug])
+  purchasedAt   DateTime  @default(now())
+  transactionId String?
+
+  @@unique([userId, templateSlug])
+}
+
+model Invite {
+  id               String        @id @default(cuid())
+  userId           String
+  templateSlug     String
+  templateCategory EventCategory
+  slug             String        @unique
+  status           InviteStatus  @default(draft)
+  data             Json          @default("{}")
+  viewCount        Int           @default(0)
+  eventDate        DateTime?
+  expiryDate       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template Template @relation(fields: [templateSlug], references: [slug])
+  rsvps    Rsvp[]
+  notes    AdminNote[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([templateSlug])
+}
+
+enum InviteStatus {
+  draft
+  published
+  expired
+  taken_down
+}
+
+model Rsvp {
+  id          String       @id @default(cuid())
+  inviteId    String
+  invite      Invite       @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  name        String
+  email       String?
+  response    RsvpResponse
+  guestCount  Int          @default(1)
+  message     String?
+  submittedAt DateTime     @default(now())
+  ipAddress   String?
+
+  @@index([inviteId])
+  @@index([email])
+}
+
+enum RsvpResponse {
+  yes
+  no
+  maybe
+}
+
+model Transaction {
+  id                    String            @id @default(cuid())
+  userId                String
+  user                  User              @relation(fields: [userId], references: [id])
+  templateSlug          String
+  amount                Int
+  currency              String            @default("USD")
+  status                TransactionStatus @default(pending)
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  promoCode             String?
+  discountAmount        Int               @default(0)
+  refundedAt            DateTime?
+  refundReason          String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([stripePaymentIntentId])
+  @@index([createdAt])
+}
+
+enum TransactionStatus {
+  pending
+  success
+  failed
+  refunded
+}
+
+model Category {
+  id           String        @id @default(cuid())
+  slug         EventCategory @unique
+  name         String
+  emoji        String
+  displayOrder Int           @default(0)
+  isVisible    Boolean       @default(true)
+}
+
+model PromoCode {
+  id            String        @id @default(cuid())
+  code          String        @unique
+  discountType  DiscountType
+  discountValue Int
+  isActive      Boolean       @default(true)
+  appliesTo     String        @default("all")
+  usageLimit    Int?
+  usageCount    Int           @default(0)
+  expiresAt     DateTime?
+  createdAt     DateTime      @default(now())
+}
+
+enum DiscountType {
+  percentage
+  flat
+}
+
+model Announcement {
+  id             String    @id @default(cuid())
+  title          String
+  content        String
+  sentTo         String
+  sentByAdminId  String
+  sentBy         AdminUser @relation(fields: [sentByAdminId], references: [id])
+  sentAt         DateTime  @default(now())
+  recipientCount Int       @default(0)
+}
+
+model AdminNote {
+  id          String    @id @default(cuid())
+  entityId    String
+  entityType  String
+  note        String
+  createdById String
+  createdBy   AdminUser @relation(fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+  invite      Invite?   @relation(fields: [entityId], references: [id])
+
+  @@index([entityId, entityType])
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  adminId    String
+  admin      AdminUser @relation(fields: [adminId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  details    Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([adminId])
+  @@index([entityId])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+enum EventCategory {
+  wedding
+  engagement
+  birthday
+  baby_shower
+  corporate
+  anniversary
+}

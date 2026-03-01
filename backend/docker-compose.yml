@@ -1,0 +1,29 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shyara}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shyara_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-shyara_invite}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://shyara:shyara_dev@db:5432/shyara_invite
+      NODE_ENV: development
+    env_file:
+      - .env
+    depends_on:
+      - db
+    volumes:
+      - ./src:/app/src
+
+volumes:
+  pgdata:

@@ -1,0 +1,62 @@
+{
+    "register":  {
+                     "email":  "stripe.e2e.1772299329510@example.com",
+                     "ok":  true
+                 },
+    "validatePromoPercent":  {
+                                 "label":  "10% OFF",
+                                 "ok":  true,
+                                 "discountType":  "percentage",
+                                 "discountValue":  10
+                             },
+    "validatePromoFlat":  {
+                              "label":  "200 OFF",
+                              "ok":  true,
+                              "discountType":  "flat",
+                              "discountValue":  200
+                          },
+    "freeCheckoutUsd":  {
+                            "transactionId":  "cmm6l9fqy0005ua9cq2bs5hsy",
+                            "ok":  true,
+                            "inviteId":  "cmm6l9fr80009ua9c8weokopz",
+                            "free":  true
+                        },
+    "paidCheckoutUsd":  {
+                            "ok":  false,
+                            "error":  "{\"success\":false,\"error\":\"Invalid API Key provided: sk_test_*****************_key\",\"details\":\"Error: Invalid API Key provided: sk_test_*****************_key\\n    at res.toJSON.then.Error_js_1.StripeAPIError.message (H:\\\\Shyara Invite\\\\backend\\\\node_modules\\\\stripe\\\\cjs\\\\RequestSender.js:102:31)\\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\"}",
+                            "status":  500
+                        },
+    "paidCheckoutEur":  {
+                            "ok":  false,
+                            "error":  "{\"success\":false,\"error\":\"Invalid API Key provided: sk_test_*****************_key\",\"details\":\"Error: Invalid API Key provided: sk_test_*****************_key\\n    at res.toJSON.then.Error_js_1.StripeAPIError.message (H:\\\\Shyara Invite\\\\backend\\\\node_modules\\\\stripe\\\\cjs\\\\RequestSender.js:102:31)\\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\"}",
+                            "status":  500
+                        },
+    "paidCheckoutUsdPercentPromo":  {
+                                        "ok":  false,
+                                        "error":  "{\"success\":false,\"error\":\"Invalid API Key provided: sk_test_*****************_key\",\"details\":\"Error: Invalid API Key provided: sk_test_*****************_key\\n    at res.toJSON.then.Error_js_1.StripeAPIError.message (H:\\\\Shyara Invite\\\\backend\\\\node_modules\\\\stripe\\\\cjs\\\\RequestSender.js:102:31)\\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\"}",
+                                        "status":  500
+                                    },
+    "paidCheckoutUsdFlatPromo":  {
+                                     "ok":  false,
+                                     "error":  "{\"success\":false,\"error\":\"Invalid API Key provided: sk_test_*****************_key\",\"details\":\"Error: Invalid API Key provided: sk_test_*****************_key\\n    at res.toJSON.then.Error_js_1.StripeAPIError.message (H:\\\\Shyara Invite\\\\backend\\\\node_modules\\\\stripe\\\\cjs\\\\RequestSender.js:102:31)\\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\"}",
+                                     "status":  500
+                                 },
+    "webhookInvalidSignature":  {
+                                    "ok":  false,
+                                    "error":  "{\"success\":false,\"error\":\"Invalid webhook signature\"}",
+                                    "status":  400
+                                },
+    "webhookValidSignature":  {
+                                  "ok":  true,
+                                  "status":  200
+                              },
+    "adminLogin":  {
+                       "email":  "admin@shyara.co.in",
+                       "ok":  true
+                   },
+    "refundAttempt":  {
+                          "ok":  false,
+                          "error":  "{\"success\":false,\"error\":\"Stripe payment intent ID missing for this transaction\"}",
+                          "status":  400
+                      }
+}
