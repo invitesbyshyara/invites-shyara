@@ -46,7 +46,7 @@ export const calculateFinalAmount = (baseAmount: number, promo?: PromoCode) => {
 
 export const finalizeSuccessfulTransaction = async (params: {
   transactionId: string;
-  stripeChargeId?: string;
+  razorpayPaymentId?: string;
   status?: "success" | "failed";
   failureReason?: string;
 }) => {
@@ -79,7 +79,7 @@ export const finalizeSuccessfulTransaction = async (params: {
       where: { id: transaction.id },
       data: {
         status: "success",
-        stripeChargeId: params.stripeChargeId,
+        razorpayPaymentId: params.razorpayPaymentId,
       },
     });
 

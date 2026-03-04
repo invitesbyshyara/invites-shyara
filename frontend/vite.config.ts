@@ -4,6 +4,7 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  cacheDir: "node_modules/.vite2",
   server: {
     host: "::",
     port: 8080,

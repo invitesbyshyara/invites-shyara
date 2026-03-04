@@ -108,6 +108,11 @@ const LiveInvite = () => {
     );
   }
 
+  const enabledSections = (inviteData.data?.enabledSections ?? null) as string[] | null;
+  const effectiveConfig = enabledSections
+    ? { ...config, supportedSections: config.supportedSections.filter(s => enabledSections.includes(s)) }
+    : config;
+
   const TemplateRenderer = getTemplateRenderer(config.category, config.slug);
 
   return (
@@ -117,7 +122,7 @@ const LiveInvite = () => {
       </div>
     }>
       <TemplateRenderer
-        config={config}
+        config={effectiveConfig}
         data={{ ...inviteData.data, slug }}
         inviteId={inviteData.inviteId}
       />

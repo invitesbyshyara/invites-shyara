@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, ArrowRight, Sparkles, LayoutGrid, CreditCard, Eye } from 'lucide-react';
+import { Menu, X, ArrowRight, Sparkles, LayoutGrid, CreditCard, Eye, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -53,7 +53,10 @@ const MobileNav = () => {
       <SheetContent side="right" className="w-80 p-0 border-l border-border">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <span className="font-display text-lg font-bold text-foreground">Shyara</span>
+          <span className="flex items-center gap-1.5 font-serif text-lg font-semibold text-foreground">
+              <Heart className="w-4 h-4 text-primary" fill="currentColor" />
+              Shyara
+            </span>
           <SheetClose asChild>
             <button className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
               <X className="w-4 h-4" />

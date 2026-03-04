@@ -109,15 +109,16 @@ const Home = () => {
 
       {/* ═══════════════ HERO ═══════════════ */}
       <section ref={heroRef} className="relative py-20 md:py-32 px-6 overflow-hidden">
-        {/* Animated mesh gradient background */}
-        <div
-          className="absolute inset-0 opacity-40 dark:opacity-30 animate-mesh-gradient"
-          style={{
-            backgroundSize: '300% 300%',
-            backgroundImage: 'linear-gradient(135deg, hsl(var(--gold) / 0.12), hsl(var(--primary) / 0.08), hsl(var(--accent) / 0.1), hsl(var(--gold) / 0.06))',
-          }}
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,hsl(var(--gold)/0.06),transparent_60%)]" />
+        {/* Romantic gradient blobs */}
+        <div className="absolute top-16 left-10 w-72 h-72 rounded-full blur-3xl opacity-20 bg-rose-light animate-float pointer-events-none" />
+        <div className="absolute bottom-16 right-10 w-64 h-64 rounded-full blur-3xl opacity-15 bg-peach animate-float-slow pointer-events-none" />
+        <div className="absolute top-40 right-1/3 w-48 h-48 rounded-full blur-3xl opacity-10 bg-lavender animate-float-reverse pointer-events-none" />
+        {/* Floating hearts */}
+        <Heart className="absolute top-20 right-24 w-5 h-5 text-primary/20 animate-float pointer-events-none" fill="currentColor" />
+        <Heart className="absolute top-40 left-20 w-3.5 h-3.5 text-rose/30 animate-float-slow pointer-events-none" fill="currentColor" />
+        <Heart className="absolute bottom-28 right-1/3 w-4 h-4 text-primary/15 animate-float-reverse pointer-events-none" fill="currentColor" />
+        <Heart className="absolute bottom-40 left-1/4 w-6 h-6 text-rose/20 animate-float pointer-events-none" fill="currentColor" />
+        <Heart className="absolute top-28 right-1/4 w-3 h-3 text-gold/25 animate-float-slow pointer-events-none" fill="currentColor" />
 
         <div className="relative z-10 container flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
           {/* Left copy */}
@@ -130,7 +131,7 @@ const Home = () => {
             <motion.p variants={fadeUp} transition={{ duration: 0.5 }} className="text-xs uppercase tracking-[0.4em] text-gold mb-6 font-body">
               Premium Digital Invitations
             </motion.p>
-            <motion.h1 variants={fadeUp} transition={{ duration: 0.5 }} className="font-display text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
+            <motion.h1 variants={fadeUp} transition={{ duration: 0.5 }} className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
               Invitations as beautiful as your celebrations
             </motion.h1>
             <motion.p variants={fadeUp} transition={{ duration: 0.5 }} className="text-lg text-muted-foreground font-body mb-8">
@@ -209,8 +210,8 @@ const Home = () => {
         className="py-20 px-6 bg-muted/40 dark:bg-white/[0.02]"
       >
         <div className="container">
-          <motion.h2 variants={fadeUp} transition={{ duration: 0.5 }} className="font-display text-3xl md:text-4xl font-bold text-center mb-4">How It Works</motion.h2>
-          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="w-16 h-px bg-gold mx-auto mb-14" />
+          <motion.h2 variants={fadeUp} transition={{ duration: 0.5 }} className="font-serif text-3xl md:text-4xl font-bold text-center mb-4">How It Works</motion.h2>
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="w-20 h-0.5 bg-gradient-to-r from-rose to-gold mx-auto mb-14 rounded-full" />
 
           <div className="relative max-w-5xl mx-auto">
             {/* Connecting line (desktop) */}
@@ -231,7 +232,7 @@ const Home = () => {
                     </span>
                     {item.icon}
                   </div>
-                  <h3 className="font-display font-semibold text-base mb-2">{item.title}</h3>
+                  <h3 className="font-serif font-semibold text-base mb-2">{item.title}</h3>
                   <p className="text-sm text-muted-foreground font-body">{item.desc}</p>
                 </motion.div>
               ))}
@@ -249,8 +250,8 @@ const Home = () => {
         className="py-20 px-6"
       >
         <div className="container">
-          <motion.h2 variants={fadeUp} transition={{ duration: 0.5 }} className="font-display text-3xl md:text-4xl font-bold text-center mb-4">Featured Templates</motion.h2>
-          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="w-16 h-px bg-gold mx-auto mb-12" />
+          <motion.h2 variants={fadeUp} transition={{ duration: 0.5 }} className="font-serif text-3xl md:text-4xl font-bold text-center mb-4">Featured Templates</motion.h2>
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="w-20 h-0.5 bg-gradient-to-r from-rose to-gold mx-auto mb-12 rounded-full" />
 
           {featuredLoading ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl mx-auto">
@@ -318,7 +319,7 @@ const Home = () => {
               </PhoneMockup>
             </motion.div>
             <motion.div variants={fadeUp} transition={{ duration: 0.7 }} className="flex-1 text-center lg:text-left">
-              <h2 className="font-display text-3xl md:text-4xl font-bold mb-6">See It In Action</h2>
+              <h2 className="font-serif text-3xl md:text-4xl font-bold mb-6">See It In Action</h2>
               <p className="text-muted-foreground font-body leading-relaxed mb-8">
                 Your guests receive a stunning, animated invitation. Here's what they experience:
               </p>
@@ -352,8 +353,8 @@ const Home = () => {
         className="py-20 px-6"
       >
         <div className="container">
-          <motion.h2 variants={fadeUp} transition={{ duration: 0.5 }} className="font-display text-3xl md:text-4xl font-bold text-center mb-4">For Every Occasion</motion.h2>
-          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="w-16 h-px bg-gold mx-auto mb-12" />
+          <motion.h2 variants={fadeUp} transition={{ duration: 0.5 }} className="font-serif text-3xl md:text-4xl font-bold text-center mb-4">For Every Occasion</motion.h2>
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="w-20 h-0.5 bg-gradient-to-r from-rose to-gold mx-auto mb-12 rounded-full" />
           <motion.div variants={staggerContainer} className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
             {categoryData.map(cat => (
               <motion.div key={cat.name} variants={fadeUp} transition={{ duration: 0.4 }}>
@@ -362,7 +363,7 @@ const Home = () => {
                   className={`group p-5 rounded-xl border border-border bg-gradient-to-br ${cat.gradient} bg-card hover:border-gold/30 hover:shadow-md hover:scale-[1.03] transition-all duration-300 text-center block`}
                 >
                   <span className="text-3xl block mb-2">{cat.emoji}</span>
-                  <h3 className="font-display font-semibold text-sm mb-1">{cat.name}</h3>
+                  <h3 className="font-serif font-semibold text-sm mb-1">{cat.name}</h3>
                   <p className="text-xs text-muted-foreground font-body">{cat.count} template{cat.count !== 1 ? 's' : ''}</p>
                   {/* Mini template thumbnails */}
                   <div className="flex justify-center gap-1 mt-3">
@@ -390,8 +391,8 @@ const Home = () => {
         className="py-20 px-6 bg-muted/40 dark:bg-white/[0.02]"
       >
         <div className="container">
-          <motion.h2 variants={fadeUp} transition={{ duration: 0.5 }} className="font-display text-3xl md:text-4xl font-bold text-center mb-4">Why Shyara</motion.h2>
-          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="w-16 h-px bg-gold mx-auto mb-14" />
+          <motion.h2 variants={fadeUp} transition={{ duration: 0.5 }} className="font-serif text-3xl md:text-4xl font-bold text-center mb-4">Why Shyara</motion.h2>
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="w-20 h-0.5 bg-gradient-to-r from-rose to-gold mx-auto mb-14 rounded-full" />
           <motion.div variants={staggerContainer} className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             {[
               { icon: <Sparkles className="w-6 h-6" />, title: 'Stunning Designs', desc: 'Premium templates with beautiful opening animations that leave guests in awe' },
@@ -405,7 +406,7 @@ const Home = () => {
                 <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                   {item.icon}
                 </div>
-                <h3 className="font-display font-semibold text-lg mb-3">{item.title}</h3>
+                <h3 className="font-serif font-semibold text-lg mb-3">{item.title}</h3>
                 <p className="text-sm text-muted-foreground font-body leading-relaxed">{item.desc}</p>
               </motion.div>
             ))}
@@ -451,11 +452,11 @@ const Home = () => {
         className="py-20 px-6 bg-muted/40 dark:bg-white/[0.02]"
       >
         <div className="container">
-          <motion.h2 variants={fadeUp} transition={{ duration: 0.5 }} className="font-display text-3xl md:text-4xl font-bold text-center mb-4">Loved by Thousands</motion.h2>
-          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="w-16 h-px bg-gold mx-auto mb-14" />
+          <motion.h2 variants={fadeUp} transition={{ duration: 0.5 }} className="font-serif text-3xl md:text-4xl font-bold text-center mb-4">Loved by Thousands</motion.h2>
+          <motion.div variants={fadeUp} transition={{ duration: 0.5 }} className="w-20 h-0.5 bg-gradient-to-r from-rose to-gold mx-auto mb-14 rounded-full" />
           <motion.div variants={staggerContainer} className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             {testimonials.map(t => (
-              <motion.div key={t.name} variants={fadeUp} transition={{ duration: 0.4 }} className="p-6 bg-card rounded-xl border border-border relative">
+              <motion.div key={t.name} variants={fadeUp} transition={{ duration: 0.4 }} className="p-6 bg-card rounded-xl border border-border relative card-romantic">
                 <Quote className="absolute top-4 right-4 w-8 h-8 text-muted-foreground/20" />
                 <div className="text-gold text-sm mb-3">{'★'.repeat(t.stars)}</div>
                 <p className="text-muted-foreground font-body text-sm leading-relaxed mb-5 italic">"{t.quote}"</p>
@@ -464,7 +465,7 @@ const Home = () => {
                     {t.initials}
                   </div>
                   <div>
-                    <p className="font-display font-semibold text-sm">{t.name}</p>
+                    <p className="font-serif font-semibold text-sm">{t.name}</p>
                     <p className="text-xs text-muted-foreground font-body">{t.event} · {t.city}</p>
                   </div>
                 </div>
@@ -484,9 +485,9 @@ const Home = () => {
         className="py-16 px-6"
       >
         <div className="container max-w-2xl text-center">
-          <div className="p-8 rounded-2xl border border-border bg-card">
+          <div className="p-8 rounded-2xl border border-border bg-card shadow-romantic">
             <Gift className="w-8 h-8 text-gold mx-auto mb-4" />
-            <h3 className="font-display text-2xl font-bold mb-3">Free templates forever.</h3>
+            <h3 className="font-serif text-2xl font-bold mb-3">Free templates forever.</h3>
             {/* Price anchoring */}
             <div className="flex items-center justify-center gap-3 mb-4 font-body text-sm">
               <span className="line-through text-muted-foreground">Traditional print {currency === 'USD' ? '$500+' : '�450+'}</span>
@@ -519,7 +520,7 @@ const Home = () => {
         className="py-24 px-6 text-center bg-muted/40 dark:bg-white/[0.02]"
       >
         <div className="max-w-2xl mx-auto">
-          <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">Ready to create something beautiful?</h2>
+          <h2 className="font-serif text-3xl md:text-4xl font-bold mb-4">Ready to create something beautiful?</h2>
           <p className="text-muted-foreground font-body mb-8">Join thousands of hosts who've made their celebrations unforgettable with Shyara.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild size="lg" className="text-base px-8 font-body">
@@ -537,7 +538,10 @@ const Home = () => {
         <div className="container">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
-              <div className="font-display text-lg font-bold mb-3">Shyara</div>
+              <div className="flex items-center gap-1.5 font-serif text-lg font-semibold mb-3">
+                <Heart className="w-4 h-4 text-primary" fill="currentColor" />
+                Shyara
+              </div>
               <p className="text-sm text-muted-foreground font-body leading-relaxed mb-4">
                 Premium digital invitations for life's most beautiful moments.
               </p>
@@ -558,7 +562,7 @@ const Home = () => {
               </div>
             </div>
             <div>
-              <h4 className="font-display font-semibold text-sm mb-3">Product</h4>
+              <h4 className="font-serif font-semibold text-sm mb-3">Product</h4>
               <div className="space-y-2 text-sm font-body text-muted-foreground">
                 <Link to="/templates" className="block hover:text-foreground transition-colors">Templates</Link>
                 <Link to="/pricing" className="block hover:text-foreground transition-colors">Pricing</Link>
@@ -566,7 +570,7 @@ const Home = () => {
               </div>
             </div>
             <div>
-              <h4 className="font-display font-semibold text-sm mb-3">Categories</h4>
+              <h4 className="font-serif font-semibold text-sm mb-3">Categories</h4>
               <div className="space-y-2 text-sm font-body text-muted-foreground">
                 <Link to="/templates?category=wedding" className="block hover:text-foreground transition-colors">Wedding</Link>
                 <Link to="/templates?category=engagement" className="block hover:text-foreground transition-colors">Engagement</Link>
@@ -574,7 +578,7 @@ const Home = () => {
               </div>
             </div>
             <div>
-              <h4 className="font-display font-semibold text-sm mb-3">Account</h4>
+              <h4 className="font-serif font-semibold text-sm mb-3">Account</h4>
               <div className="space-y-2 text-sm font-body text-muted-foreground">
                 <Link to="/login" className="block hover:text-foreground transition-colors">Login</Link>
                 <Link to="/register" className="block hover:text-foreground transition-colors">Register</Link>
@@ -648,7 +652,7 @@ const TemplateCard = ({
       </div>
     </div>
     <div className="p-3">
-      <h3 className="font-display font-semibold text-sm">{t.name}</h3>
+      <h3 className="font-serif font-semibold text-sm">{t.name}</h3>
       <p className="text-xs text-muted-foreground font-body capitalize">{t.category.replace('-', ' ')}</p>
     </div>
   </motion.div>

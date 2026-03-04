@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import MobileNav from '@/components/MobileNav';
 import ThemeToggle from '@/components/ThemeToggle';
 import { Currency, useCurrency } from '@/contexts/CurrencyContext';
+import { Heart } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const navLinks = [
@@ -31,16 +32,20 @@ const Navbar = () => {
       initial={{ y: -10, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={`sticky top-0 z-50 transition-all duration-300 border-b ${
+      className={`sticky top-0 z-50 transition-all duration-300 ${
         scrolled
-          ? 'bg-card/95 backdrop-blur-md shadow-sm border-border'
-          : 'bg-card/60 backdrop-blur-sm border-transparent'
+          ? 'bg-background/90 backdrop-blur-lg shadow-sm border-b border-border'
+          : 'bg-transparent border-b border-transparent'
       }`}
     >
       <div className="container flex items-center justify-between h-16">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 group">
-          <span className="font-display text-xl font-bold text-foreground tracking-tight group-hover:text-primary transition-colors duration-200">
+          <Heart
+            className="w-5 h-5 text-primary transition-transform duration-200 group-hover:scale-110"
+            fill="currentColor"
+          />
+          <span className="font-serif text-xl font-semibold text-foreground tracking-tight group-hover:text-primary transition-colors duration-200">
             Shyara
           </span>
         </Link>
@@ -51,7 +56,7 @@ const Navbar = () => {
             <Link
               key={link.to}
               to={link.to}
-              className={`relative px-4 py-2 text-sm font-medium rounded-full transition-all duration-200 ${
+              className={`relative px-4 py-2 text-sm font-medium transition-all duration-200 ${
                 isActive(link.to)
                   ? 'text-primary'
                   : 'text-muted-foreground hover:text-foreground'
@@ -60,8 +65,8 @@ const Navbar = () => {
               {link.label}
               {isActive(link.to) && (
                 <motion.span
-                  layoutId="nav-pill"
-                  className="absolute inset-0 bg-primary/10 dark:bg-primary/15 rounded-full -z-10"
+                  layoutId="nav-underline"
+                  className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-primary rounded-full"
                   transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
                 />
               )}
@@ -75,7 +80,7 @@ const Navbar = () => {
           <select
             value={currency}
             onChange={e => setCurrency(e.target.value as Currency)}
-            className="text-xs font-medium text-muted-foreground bg-transparent border border-border rounded px-2 py-1 cursor-pointer"
+            className="text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-lg px-2 py-1 cursor-pointer"
           >
             <option value="USD">$ USD</option>
             <option value="EUR">€ EUR</option>
@@ -86,7 +91,7 @@ const Navbar = () => {
           >
             Log in
           </Link>
-          <Button asChild size="sm" className="rounded-full px-5">
+          <Button asChild size="sm" className="rounded-full px-5 shadow-romantic">
             <Link to="/register">Get Started</Link>
           </Button>
         </div>
@@ -97,7 +102,7 @@ const Navbar = () => {
           <select
             value={currency}
             onChange={e => setCurrency(e.target.value as Currency)}
-            className="text-xs font-medium text-muted-foreground bg-transparent border border-border rounded px-2 py-1 cursor-pointer"
+            className="text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-lg px-2 py-1 cursor-pointer"
           >
             <option value="USD">$ USD</option>
             <option value="EUR">€ EUR</option>

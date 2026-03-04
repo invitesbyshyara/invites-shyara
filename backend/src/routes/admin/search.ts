@@ -46,8 +46,8 @@ router.get(
       prisma.transaction.findMany({
         where: {
           OR: [
-            { stripeChargeId: { contains: q, mode: "insensitive" } },
-            { stripePaymentIntentId: { contains: q, mode: "insensitive" } },
+            { razorpayPaymentId: { contains: q, mode: "insensitive" } },
+            { razorpayOrderId: { contains: q, mode: "insensitive" } },
           ],
         },
         include: {

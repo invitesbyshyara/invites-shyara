@@ -1,41 +1,57 @@
-import Stripe from "stripe";
+import Razorpay from "razorpay";
+import crypto from "crypto";
 import { env } from "../lib/env";
 
-const stripe = new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: "2026-02-25.clover" });
+const rz = new Razorpay({
+  key_id: env.RAZORPAY_KEY_ID,
+  key_secret: env.RAZORPAY_KEY_SECRET,
+});
 
-export type StripeCurrency = "usd" | "eur";
+export type RazorpayCurrency = "USD" | "EUR";
 
-export const createStripePaymentIntent = async (params: {
+export const createRazorpayOrder = async (params: {
   amountInCents: number;
-  currency: StripeCurrency;
-  metadata?: Stripe.MetadataParam;
+  currency: RazorpayCurrency;
+  receipt: string;
+  notes?: Record<string, string>;
 }) =>
-  stripe.paymentIntents.create({
+  rz.orders.create({
     amount: params.amountInCents,
     currency: params.currency,
-    metadata: params.metadata,
-    automatic_payment_methods: { enabled: true },
+    receipt: params.receipt,
+    notes: params.notes,
   });
 
-export const retrievePaymentIntent = async (paymentIntentId: string) =>
-  stripe.paymentIntents.retrieve(paymentIntentId);
-
-export const createStripeRefund = async (paymentIntentId: string, reason?: string) => {
-  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ["latest_charge"] });
-  const chargeId =
-    typeof paymentIntent.latest_charge === "string"
-      ? paymentIntent.latest_charge
-      : paymentIntent.latest_charge?.id;
-
-  if (!chargeId) {
-    throw new Error("No charge found for payment intent");
-  }
-
-  return stripe.refunds.create({
-    charge: chargeId,
-    metadata: reason ? { reason } : undefined,
-  });
+export const verifyRazorpayPayment = (
+  razorpayOrderId: string,
+  razorpayPaymentId: string,
+  razorpaySignature: string,
+): boolean => {
+  const body = `${razorpayOrderId}|${razorpayPaymentId}`;
+  const expectedSignature = crypto
+    .createHmac("sha256", env.RAZORPAY_KEY_SECRET)
+    .update(body)
+    .digest("hex");
+  return expectedSignature === razorpaySignature;
 };
 
-export const verifyStripeWebhookSignature = (body: Buffer, signature: string): Stripe.Event =>
-  stripe.webhooks.constructEvent(body, signature, env.STRIPE_WEBHOOK_SECRET);
+export const verifyRazorpayWebhook = (rawBody: Buffer, signature: string): Record<string, any> => {
+  const expectedSignature = crypto
+    .createHmac("sha256", env.RAZORPAY_WEBHOOK_SECRET)
+    .update(rawBody)
+    .digest("hex");
+
+  if (expectedSignature !== signature) {
+    throw new Error("Invalid webhook signature");
+  }
+
+  return JSON.parse(rawBody.toString("utf8"));
+};
+
+export const fetchRazorpayPayment = async (razorpayPaymentId: string) =>
+  rz.payments.fetch(razorpayPaymentId);
+
+export const createRazorpayRefund = async (razorpayPaymentId: string, amountInCents?: number) =>
+  rz.payments.refund(razorpayPaymentId, {
+    ...(amountInCents !== undefined ? { amount: amountInCents } : {}),
+  });

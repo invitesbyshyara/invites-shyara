@@ -31,7 +31,7 @@ import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
 const allowedOrigins = [env.FRONTEND_URL, env.ADMIN_PORTAL_URL ?? env.FRONTEND_URL];
-const webhookPath = "/api/checkout/stripe-webhook";
+const webhookPath = "/api/checkout/webhook";
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

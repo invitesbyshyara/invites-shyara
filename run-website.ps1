@@ -15,7 +15,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 
 $Root = $PSScriptRoot
 $Backend = Join-Path $Root "backend"
-$Frontend = Join-Path $Root "frontend\shareable-moments"
+$Frontend = Join-Path $Root "frontend"
 $BackendEnv = Join-Path $Backend ".env"
 $BackendEnvExample = Join-Path $Backend ".env.example"
 $FrontendEnvLocal = Join-Path $Frontend ".env.local"

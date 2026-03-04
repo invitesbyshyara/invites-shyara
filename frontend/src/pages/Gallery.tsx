@@ -60,11 +60,11 @@ const Gallery = () => {
       <Navbar />
 
       <div className="container py-10 px-4">
-        <h1 className="font-display text-3xl md:text-4xl font-bold text-center mb-2">Template Gallery</h1>
+        <h1 className="font-serif text-3xl md:text-4xl font-bold text-center mb-2">Template Gallery</h1>
         <p className="text-center text-muted-foreground font-body mb-6">Find the perfect design for your celebration</p>
 
         {!loading && freeCount > 0 && (
-          <div className="flex items-center justify-center gap-2 py-3 px-6 rounded-xl bg-primary/5 border border-primary/10 text-sm font-body text-foreground mb-8 max-w-md mx-auto">
+          <div className="flex items-center justify-center gap-2 py-3 px-6 rounded-xl glass-rose text-sm font-body text-foreground mb-8 max-w-md mx-auto">
             <Sparkles className="w-4 h-4 text-gold" />
             <span>{freeCount} free template{freeCount !== 1 ? "s" : ""} available - no payment required!</span>
           </div>
@@ -120,7 +120,7 @@ const Gallery = () => {
         ) : templates.length === 0 ? (
           <div className="text-center py-20 rounded-xl border border-border bg-card">
             <div className="text-4xl mb-4">No results</div>
-            <h3 className="font-display text-xl font-semibold mb-2">No templates found</h3>
+            <h3 className="font-serif text-xl font-semibold mb-2">No templates found</h3>
             <p className="text-muted-foreground font-body mb-6">Try a different category or clear your filters</p>
             <Button onClick={() => setCategory(null)} className="font-body">
               View All Templates
@@ -131,7 +131,7 @@ const Gallery = () => {
             {templates.map((template) => (
               <div
                 key={template.slug}
-                className="group rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1 relative"
+                className="group rounded-xl border border-border bg-card overflow-hidden card-romantic relative"
               >
                 {template.slug === POPULAR_SLUG && (
                   <div className="absolute top-3 right-3 z-20 px-2.5 py-1 rounded-full bg-gold text-gold-foreground text-[10px] font-body font-semibold flex items-center gap-1">
@@ -165,7 +165,7 @@ const Gallery = () => {
                   </div>
                 </div>
                 <div className="p-4">
-                  <h3 className="font-display font-semibold">{template.name}</h3>
+                  <h3 className="font-serif font-semibold">{template.name}</h3>
                   <div className="flex items-center justify-between mt-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gold font-body">★★★★★</span>

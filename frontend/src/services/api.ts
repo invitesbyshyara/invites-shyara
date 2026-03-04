@@ -204,10 +204,10 @@ type CheckoutOrderResponse = {
   free: boolean;
   inviteId?: string;
   transactionId?: string;
-  clientSecret?: string;
-  paymentIntentId?: string;
+  orderId?: string;
+  keyId?: string;
   amount?: number;
-  currency?: "usd" | "eur";
+  currency?: string;
 };
 
 export const api = {
@@ -545,12 +545,12 @@ export const api = {
     );
   },
 
-  confirmCheckoutPayment: async (paymentIntentId: string) =>
+  verifyPayment: async (data: { razorpayPaymentId: string; razorpayOrderId: string; razorpaySignature: string }) =>
     request<{ transactionId: string; inviteId: string }>(
-      "/checkout/confirm-payment",
+      "/checkout/verify-payment",
       {
         method: "POST",
-        body: JSON.stringify({ paymentIntentId }),
+        body: JSON.stringify(data),
       },
       true,
     ),

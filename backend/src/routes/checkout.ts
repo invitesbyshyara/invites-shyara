@@ -1,15 +1,15 @@
 import crypto from "crypto";
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
-import Stripe from "stripe";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { env } from "../lib/env";
 import { verifyToken } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import {
-  createStripePaymentIntent,
-  retrievePaymentIntent,
-  verifyStripeWebhookSignature,
+  createRazorpayOrder,
+  verifyRazorpayPayment,
+  verifyRazorpayWebhook,
 } from "../services/payment";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 
@@ -192,10 +192,11 @@ router.post(
       });
     }
 
-    const paymentIntent = await createStripePaymentIntent({
+    const order = await createRazorpayOrder({
       amountInCents: finalAmount,
-      currency,
-      metadata: {
+      currency: currency.toUpperCase() as "USD" | "EUR",
+      receipt: `rcpt_${user.id.slice(0, 8)}_${Date.now()}`,
+      notes: {
         userId: user.id,
         templateSlug,
         promoCode: promo?.code ?? "",
@@ -209,7 +210,7 @@ router.post(
         amount: finalAmount,
         currency: currency.toUpperCase(),
         status: "pending",
-        stripePaymentIntentId: paymentIntent.id,
+        razorpayOrderId: order.id,
         promoCode: promo?.code,
         discountAmount,
       },
@@ -217,10 +218,10 @@ router.post(
 
     return sendSuccess(res, {
       free: false,
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id,
+      orderId: order.id,
       amount: finalAmount,
-      currency,
+      currency: currency.toUpperCase(),
+      keyId: env.RAZORPAY_KEY_ID,
       transactionId: transaction.id,
     });
   }),
@@ -228,24 +229,20 @@ router.post(
 
 const findExistingInvite = async (tx: Prisma.TransactionClient, userId: string, templateSlug: string) => {
   const existingInvite = await tx.invite.findFirst({
-    where: {
-      userId,
-      templateSlug,
-    },
+    where: { userId, templateSlug },
     orderBy: { createdAt: "desc" },
   });
-
   return existingInvite?.id ?? null;
 };
 
-const completeTransactionFromPaymentIntentInTransaction = async (
+const completeTransactionByOrderId = async (
   tx: Prisma.TransactionClient,
-  paymentIntentId: string,
-  stripeChargeId?: string,
+  razorpayOrderId: string,
+  razorpayPaymentId?: string,
   expectedUserId?: string,
 ) => {
   const transaction = await tx.transaction.findFirst({
-    where: { stripePaymentIntentId: paymentIntentId },
+    where: { razorpayOrderId },
   });
 
   if (!transaction) {
@@ -268,13 +265,10 @@ const completeTransactionFromPaymentIntentInTransaction = async (
   }
 
   const markedAsSuccess = await tx.transaction.updateMany({
-    where: {
-      id: transaction.id,
-      status: "pending",
-    },
+    where: { id: transaction.id, status: "pending" },
     data: {
       status: "success",
-      ...(stripeChargeId ? { stripeChargeId } : {}),
+      ...(razorpayPaymentId ? { razorpayPaymentId } : {}),
     },
   });
 
@@ -286,29 +280,17 @@ const completeTransactionFromPaymentIntentInTransaction = async (
         transactionId: latest.id,
       };
     }
-
     throw new AppError("Transaction already processed", 409);
   }
 
-  const template = await tx.template.findUniqueOrThrow({
-    where: { slug: transaction.templateSlug },
-  });
+  const template = await tx.template.findUniqueOrThrow({ where: { slug: transaction.templateSlug } });
 
   await tx.userTemplate.upsert({
     where: {
-      userId_templateSlug: {
-        userId: transaction.userId,
-        templateSlug: transaction.templateSlug,
-      },
+      userId_templateSlug: { userId: transaction.userId, templateSlug: transaction.templateSlug },
     },
-    create: {
-      userId: transaction.userId,
-      templateSlug: transaction.templateSlug,
-      transactionId: transaction.id,
-    },
-    update: {
-      transactionId: transaction.id,
-    },
+    create: { userId: transaction.userId, templateSlug: transaction.templateSlug, transactionId: transaction.id },
+    update: { transactionId: transaction.id },
   });
 
   await tx.template.update({
@@ -336,29 +318,26 @@ const completeTransactionFromPaymentIntentInTransaction = async (
   return { inviteId: invite.id, transactionId: transaction.id };
 };
 
-const confirmPaymentSchema = z.object({
-  paymentIntentId: z.string().min(1),
+const verifyPaymentSchema = z.object({
+  razorpayPaymentId: z.string().min(1),
+  razorpayOrderId: z.string().min(1),
+  razorpaySignature: z.string().min(1),
 });
 
 router.post(
-  "/confirm-payment",
+  "/verify-payment",
   verifyToken,
-  validate({ body: confirmPaymentSchema }),
+  validate({ body: verifyPaymentSchema }),
   asyncHandler(async (req, res) => {
-    const { paymentIntentId } = req.body;
-    const paymentIntent = await retrievePaymentIntent(paymentIntentId);
+    const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
 
-    if (paymentIntent.status !== "succeeded") {
-      throw new AppError("Payment not completed", 400);
+    const isValid = verifyRazorpayPayment(razorpayOrderId, razorpayPaymentId, razorpaySignature);
+    if (!isValid) {
+      throw new AppError("Invalid payment signature", 400);
     }
 
-    const stripeChargeId =
-      typeof paymentIntent.latest_charge === "string"
-        ? paymentIntent.latest_charge
-        : paymentIntent.latest_charge?.id;
-
     const result = await prisma.$transaction((tx) =>
-      completeTransactionFromPaymentIntentInTransaction(tx, paymentIntentId, stripeChargeId, req.user!.id),
+      completeTransactionByOrderId(tx, razorpayOrderId, razorpayPaymentId, req.user!.id),
     );
 
     return sendSuccess(res, {
@@ -369,9 +348,9 @@ router.post(
 );
 
 router.post(
-  "/stripe-webhook",
+  "/webhook",
   asyncHandler(async (req, res) => {
-    const signature = req.headers["stripe-signature"];
+    const signature = req.headers["x-razorpay-signature"];
     if (!signature || typeof signature !== "string") {
       throw new AppError("Missing webhook signature", 400);
     }
@@ -381,23 +360,23 @@ router.post(
       throw new AppError("Missing webhook body", 400);
     }
 
-    let event: Stripe.Event;
+    let event: Record<string, any>;
     try {
-      event = verifyStripeWebhookSignature(rawBody, signature);
+      event = verifyRazorpayWebhook(rawBody, signature);
     } catch {
       throw new AppError("Invalid webhook signature", 400);
     }
 
-    if (event.type === "payment_intent.succeeded") {
-      const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      const stripeChargeId =
-        typeof paymentIntent.latest_charge === "string"
-          ? paymentIntent.latest_charge
-          : paymentIntent.latest_charge?.id;
+    const eventType: string = event.event ?? "";
+    const paymentEntity = event.payload?.payment?.entity;
+
+    if (eventType === "payment.captured" && paymentEntity) {
+      const razorpayOrderId: string = paymentEntity.order_id;
+      const razorpayPaymentId: string = paymentEntity.id;
 
       try {
         await prisma.$transaction((tx) =>
-          completeTransactionFromPaymentIntentInTransaction(tx, paymentIntent.id, stripeChargeId),
+          completeTransactionByOrderId(tx, razorpayOrderId, razorpayPaymentId),
         );
       } catch (error) {
         if (!(error instanceof AppError) || error.statusCode !== 404) {
@@ -408,17 +387,13 @@ router.post(
       return res.status(200).json({ received: true });
     }
 
-    if (event.type === "payment_intent.payment_failed") {
-      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+    if (eventType === "payment.failed" && paymentEntity) {
+      const razorpayOrderId: string = paymentEntity.order_id;
+      const errorDescription: string = paymentEntity.error_description ?? "Payment failed";
+
       await prisma.transaction.updateMany({
-        where: {
-          stripePaymentIntentId: paymentIntent.id,
-          status: "pending",
-        },
-        data: {
-          status: "failed",
-          refundReason: paymentIntent.last_payment_error?.message,
-        },
+        where: { razorpayOrderId, status: "pending" },
+        data: { status: "failed", refundReason: errorDescription },
       });
     }
 

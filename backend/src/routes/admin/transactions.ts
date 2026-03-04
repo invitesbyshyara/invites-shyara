@@ -5,7 +5,7 @@ import { logAudit } from "../../lib/audit";
 import { prisma } from "../../lib/prisma";
 import { requirePermission, verifyAdminToken } from "../../middleware/adminAuth";
 import { validate } from "../../middleware/validate";
-import { createStripeRefund } from "../../services/payment";
+import { createRazorpayRefund } from "../../services/payment";
 import { AppError, asyncHandler, createPagination, parsePagination, sendSuccess } from "../../utils/http";
 
 const router = Router();
@@ -91,11 +91,11 @@ router.post(
       throw new AppError("Only successful transactions can be refunded", 400);
     }
 
-    if (!transaction.stripePaymentIntentId) {
-      throw new AppError("Stripe payment intent ID missing for this transaction", 400);
+    if (!transaction.razorpayPaymentId) {
+      throw new AppError("Razorpay payment ID missing for this transaction", 400);
     }
 
-    await createStripeRefund(transaction.stripePaymentIntentId, req.body.reason);
+    await createRazorpayRefund(transaction.razorpayPaymentId);
 
     const updated = await prisma.transaction.update({
       where: { id: transaction.id },
@@ -111,7 +111,7 @@ router.post(
       action: "PROCESS_REFUND",
       entityType: "transaction",
       entityId: updated.id,
-      details: { reason: req.body.reason, stripePaymentIntentId: transaction.stripePaymentIntentId },
+      details: { reason: req.body.reason, razorpayPaymentId: transaction.razorpayPaymentId },
     });
 
     return sendSuccess(res, updated);

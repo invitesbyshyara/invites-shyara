@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { TemplateConfig, Invite, TemplateField } from '@/types';
 import { api } from '@/services/api';
 import { getTemplateRenderer } from '@/templates/registry';
@@ -8,6 +9,14 @@ import { useToast } from '@/hooks/use-toast';
 import FieldRenderer from './FieldRenderer';
 import SlugPicker from './SlugPicker';
 import PhoneMockup from '@/components/PhoneMockup';
+
+const SECTION_META: Record<string, { label: string; description: string }> = {
+  story:    { label: 'Story / Description', description: 'Share your love story or event description' },
+  venue:    { label: 'Venue & Location',    description: 'Venue name, address, and directions' },
+  schedule: { label: 'Schedule / Timeline', description: 'Timeline of events during the day' },
+  gallery:  { label: 'Photo Gallery',       description: 'Include photos in your invitation' },
+  rsvp:     { label: 'RSVP',               description: 'Allow guests to respond to your invitation' },
+};
 
 interface InviteFormProps {
   config: TemplateConfig;
@@ -32,6 +41,14 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [previewMode, setPreviewMode] = useState<'mobile' | 'desktop'>('mobile');
+  const [enabledSections, setEnabledSections] = useState<string[]>(
+    invite.data?.enabledSections ?? config.supportedSections
+  );
+  const toggleSection = useCallback((section: string) => {
+    setEnabledSections(prev =>
+      prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]
+    );
+  }, []);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -76,6 +93,8 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
     const today = new Date().toISOString().split('T')[0];
 
     fields.forEach(f => {
+      const fieldSection = f.section === 'basic' ? 'hero' : (f.section ?? 'basic');
+      if (fieldSection !== 'hero' && fieldSection !== 'settings' && !enabledSections.includes(fieldSection)) return;
       const val = formData[f.key];
       if (f.required && (!val || (typeof val === 'string' && !val.trim()))) {
         errs[f.key] = `${f.label} is required`;
@@ -120,7 +139,7 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
   const handleSaveDraft = async () => {
     setSaving(true);
     try {
-      await api.updateInvite(invite.id, { data: formData, slug });
+      await api.updateInvite(invite.id, { data: { ...formData, enabledSections }, slug });
       toast({ title: 'Draft saved!', description: 'Your progress has been saved.' });
     } catch {
       toast({ title: 'Failed to save', variant: 'destructive' });
@@ -130,7 +149,12 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
   };
 
   const handlePublish = async () => {
-    const missing = config.fields.filter(f => f.required && !formData[f.key]);
+    const missing = config.fields.filter(f => {
+      if (!f.required) return false;
+      const fieldSection = f.section === 'basic' ? 'hero' : (f.section ?? 'basic');
+      if (fieldSection !== 'hero' && fieldSection !== 'settings' && !enabledSections.includes(fieldSection)) return false;
+      return !formData[f.key];
+    });
     if (missing.length > 0) {
       toast({ title: 'Missing required fields', description: missing.map(f => f.label).join(', '), variant: 'destructive' });
       return;
@@ -145,13 +169,14 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
   const confirmPublish = async () => {
     setShowPublishConfirm(false);
     setPublishing(true);
+    const dataToSave = { ...formData, enabledSections };
     try {
       if (isEditing) {
-        await api.updateInvite(invite.id, { data: formData, status: 'published', slug });
+        await api.updateInvite(invite.id, { data: dataToSave, status: 'published', slug });
         toast({ title: 'Invite updated!', description: 'Changes are now live.' });
         navigate('/dashboard');
       } else {
-        const result = await api.createInvite({ templateSlug: config.slug, templateCategory: config.category, slug, eventData: formData });
+        const result = await api.createInvite({ templateSlug: config.slug, templateCategory: config.category, slug, eventData: dataToSave });
         toast({ title: 'Invite published! 🎉', description: 'Your invitation is now live.' });
         navigate(`/publish-success/${result.id}`);
       }
@@ -163,6 +188,11 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
   };
 
   const TemplateRenderer = useMemo(() => getTemplateRenderer(config.category, config.slug), [config.category, config.slug]);
+
+  const effectiveConfig = useMemo(() => ({
+    ...config,
+    supportedSections: config.supportedSections.filter(s => enabledSections.includes(s)),
+  }), [config, enabledSections]);
 
   const sectionLabels: Record<string, string> = {
     basic: 'Basic Information', venue: 'Venue Details', story: 'Your Story',
@@ -181,24 +211,44 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
       groups[section].push(f);
     });
 
-    return Object.entries(groups).map(([section, sectionFields]) => (
-      <div key={section} className="rounded-xl border border-border bg-card p-6">
-        <h3 className="font-display text-lg font-semibold mb-5">{sectionLabels[section] || section}</h3>
-        <div className="space-y-5">
-          {sectionFields.map(field => (
-            <FieldRenderer
-              key={field.key}
-              field={field}
-              value={formData[field.key]}
-              onChange={handleFieldChange}
-              error={errors[field.key]}
-              touched={touched[field.key]}
-              onBlur={handleBlur}
-            />
-          ))}
+    return Object.entries(groups).map(([section, sectionFields]) => {
+      const isToggleable = section !== 'basic' && section !== 'settings';
+      const isEnabled = !isToggleable || enabledSections.includes(section);
+      const meta = SECTION_META[section];
+
+      return (
+        <div key={section} className="rounded-xl border border-border bg-card overflow-hidden">
+          {isToggleable ? (
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <div>
+                <h3 className="font-display text-base font-semibold">{meta?.label ?? sectionLabels[section]}</h3>
+                <p className="text-xs text-muted-foreground font-body mt-0.5">{meta?.description}</p>
+              </div>
+              <Switch checked={isEnabled} onCheckedChange={() => toggleSection(section)} />
+            </div>
+          ) : (
+            <div className="px-6 pt-6 pb-1">
+              <h3 className="font-display text-lg font-semibold">{sectionLabels[section] || section}</h3>
+            </div>
+          )}
+          {isEnabled && (
+            <div className="p-6 space-y-5">
+              {sectionFields.map(field => (
+                <FieldRenderer
+                  key={field.key}
+                  field={field}
+                  value={formData[field.key]}
+                  onChange={handleFieldChange}
+                  error={errors[field.key]}
+                  touched={touched[field.key]}
+                  onBlur={handleBlur}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      </div>
-    ));
+      );
+    });
   };
 
   return (
@@ -264,7 +314,7 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
                   <PhoneMockup>
                     <div className="h-[600px] overflow-y-auto">
                       <Suspense fallback={<div className="min-h-[400px] flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-                        <TemplateRenderer config={config} data={previewData} isPreview />
+                        <TemplateRenderer config={effectiveConfig} data={previewData} isPreview />
                       </Suspense>
                     </div>
                   </PhoneMockup>
@@ -272,7 +322,7 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
               ) : (
                 <div className="max-h-[600px] overflow-y-auto">
                   <Suspense fallback={<div className="min-h-[400px] flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-                    <TemplateRenderer config={config} data={previewData} isPreview />
+                    <TemplateRenderer config={effectiveConfig} data={previewData} isPreview />
                   </Suspense>
                 </div>
               )}
@@ -320,7 +370,7 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
               {isEditing ? 'Your changes will go live immediately.' : 'Your invite will be live at:'}
             </p>
             {!isEditing && slug && (
-              <p className="text-xs text-gold font-body font-medium text-center mb-4 break-all">${window.location.host}/i/{slug}</p>
+              <p className="text-xs text-gold font-body font-medium text-center mb-4 break-all">{window.location.host}/i/{slug}</p>
             )}
             <div className="flex gap-3 mt-4">
               <Button variant="outline" className="flex-1 font-body" onClick={() => setShowPublishConfirm(false)}>Cancel</Button>

@@ -1,22 +1,39 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ChevronDown, Sparkles, X } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ChevronDown, X } from "lucide-react";
 import TemplateThumbnail from "@/components/TemplateThumbnail";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { allTemplates } from "@/templates/registry";
+import { api } from "@/services/api";
 import { TemplateConfig } from "@/types";
+
+const loadRazorpayScript = (): Promise<void> =>
+  new Promise((resolve) => {
+    if ((window as any).Razorpay) { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = () => resolve();
+    document.body.appendChild(s);
+  });
 
 const Checkout = () => {
   const { slug } = useParams<{ slug: string }>();
   const { currency, symbol, formatPrice } = useCurrency();
+  const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
   const [template, setTemplate] = useState<TemplateConfig | null>(null);
   const [loading, setLoading] = useState(true);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
 
   const [promoExpanded, setPromoExpanded] = useState(false);
-  const [promoCode, setPromoCode] = useState("");
+  const [promoInput, setPromoInput] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
   const [appliedPromo, setAppliedPromo] = useState<{
     code: string;
     type: "percentage" | "flat";
@@ -31,6 +48,12 @@ const Checkout = () => {
     setLoading(false);
   }, [slug]);
 
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      navigate(`/login?next=/checkout/${slug}`);
+    }
+  }, [loading, isAuthenticated, navigate, slug]);
+
   const basePrice = template ? (currency === "USD" ? template.priceUsd : template.priceEur) : 0;
   const discount = !appliedPromo
     ? 0
@@ -39,10 +62,86 @@ const Checkout = () => {
       : Math.min(appliedPromo.value, basePrice);
   const finalPrice = Math.max(0, basePrice - discount);
 
+  const handleApplyPromo = async () => {
+    if (!promoInput.trim() || !slug) return;
+    setPromoLoading(true);
+    setPromoError(null);
+    try {
+      const result = await api.validatePromo(slug, promoInput.trim());
+      setAppliedPromo({
+        code: promoInput.trim().toUpperCase(),
+        type: result.discountType,
+        value: result.discountValue,
+        label: result.label,
+      });
+      setPromoInput("");
+      setPromoExpanded(false);
+    } catch (err: any) {
+      setPromoError(err.message ?? "Invalid promo code");
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
   const handleRemovePromo = () => {
     setAppliedPromo(null);
-    setPromoCode("");
+    setPromoInput("");
     setPromoExpanded(false);
+  };
+
+  const handlePay = async () => {
+    if (!slug || !template) return;
+    setPaying(true);
+    setPayError(null);
+    try {
+      const order = await api.createCheckoutOrder(
+        slug,
+        currency.toLowerCase() as "usd" | "eur",
+        appliedPromo?.code,
+      );
+
+      if (order.free) {
+        navigate("/dashboard");
+        return;
+      }
+
+      await loadRazorpayScript();
+
+      const rzp = new (window as any).Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.orderId,
+        name: "Shyara Invites",
+        description: template.name,
+        handler: async (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) => {
+          try {
+            const result = await api.verifyPayment({
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            navigate(`/invite/${result.inviteId}/edit`);
+          } catch {
+            setPayError("Payment verification failed. Please contact support if the amount was deducted.");
+            setPaying(false);
+          }
+        },
+        modal: {
+          ondismiss: () => setPaying(false),
+        },
+        prefill: { name: user?.name ?? "", email: user?.email ?? "" },
+        theme: { color: "#D4AF37" },
+      });
+      rzp.open();
+    } catch (err: any) {
+      setPayError(err.message ?? "Payment failed. Please try again.");
+      setPaying(false);
+    }
   };
 
   if (loading || !template) {
@@ -85,7 +184,7 @@ const Checkout = () => {
           </div>
         </div>
 
-        {/* Promo code section — visible for Stripe review */}
+        {/* Promo code section */}
         {template.isPremium && (
           <div className="p-6 rounded-xl border border-border bg-card mb-8">
             <h3 className="font-display font-semibold mb-4">Promo Code</h3>
@@ -99,19 +198,28 @@ const Checkout = () => {
                   <ChevronDown className={`w-4 h-4 transition-transform ${promoExpanded ? "rotate-180" : ""}`} />
                 </button>
                 {promoExpanded && (
-                  <div className="mt-3 flex gap-2">
-                    <Input
-                      value={promoCode}
-                      onChange={(e) => setPromoCode(e.target.value)}
-                      placeholder="Enter promo code"
-                      className="flex-1 uppercase"
-                    />
-                    <Button variant="outline" size="sm" className="font-body px-4 h-10" disabled>
-                      Apply
-                    </Button>
+                  <div className="mt-3 space-y-2">
+                    <div className="flex gap-2">
+                      <Input
+                        value={promoInput}
+                        onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                        placeholder="Enter promo code"
+                        className="flex-1 uppercase"
+                        onKeyDown={(e) => e.key === "Enter" && handleApplyPromo()}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-body px-4 h-10"
+                        onClick={handleApplyPromo}
+                        disabled={!promoInput.trim() || promoLoading}
+                      >
+                        {promoLoading ? "..." : "Apply"}
+                      </Button>
+                    </div>
+                    {promoError && <p className="text-xs text-destructive font-body">{promoError}</p>}
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground font-body mt-2">Promo codes available at launch.</p>
               </>
             ) : (
               <div>
@@ -159,19 +267,24 @@ const Checkout = () => {
           )}
         </div>
 
-        {/* Launching Soon — replaces payment button */}
-        <div className="rounded-xl border border-border bg-card p-8 text-center">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <Sparkles className="w-7 h-7 text-primary" />
-          </div>
-          <h3 className="font-display text-xl font-semibold mb-2">Payments Launching Soon</h3>
-          <p className="text-sm text-muted-foreground font-body leading-relaxed max-w-xs mx-auto">
-            We're finalising our secure international payment setup. Check back shortly — your invitation will be ready to create!
-          </p>
-        </div>
+        {/* Pay button */}
+        {payError && (
+          <p className="text-sm text-destructive font-body text-center mb-4">{payError}</p>
+        )}
+        <Button
+          className="w-full h-12 font-display text-base"
+          onClick={handlePay}
+          disabled={paying}
+        >
+          {paying
+            ? "Processing..."
+            : template.isPremium
+              ? `Pay ${formatPrice(finalPrice)}`
+              : "Get Template — Free"}
+        </Button>
 
         <p className="text-center text-xs text-muted-foreground font-body mt-4">
-          Secure payment via Stripe. Cards accepted worldwide.
+          Secure payment via Razorpay. Cards &amp; UPI accepted.
         </p>
       </div>
     </div>
