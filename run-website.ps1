@@ -80,6 +80,74 @@ function Get-EnvValue {
     return ($line -split "=", 2)[1]
 }
 
+function Clear-ViteCaches {
+    param([string]$FrontendPath)
+
+    Write-Step "Clearing stale Vite cache folders"
+    $cacheDirs = @(
+        (Join-Path $FrontendPath ".vite-cache"),
+        (Join-Path $FrontendPath "node_modules\\.vite"),
+        (Join-Path $FrontendPath "node_modules\\.vite2")
+    )
+
+    $cacheRoot = $env:LOCALAPPDATA
+    if (-not $cacheRoot) {
+        $cacheRoot = $env:TEMP
+    }
+    if ($cacheRoot) {
+        $cacheDirs += (Join-Path $cacheRoot "shyara-vite-cache")
+    }
+
+    foreach ($dir in $cacheDirs) {
+        if (-not (Test-Path $dir)) {
+            continue
+        }
+
+        try {
+            Remove-Item -Path $dir -Recurse -Force -ErrorAction Stop
+            Write-Ok "Removed $dir"
+        }
+        catch {
+            Write-Warn "Could not remove $dir (likely locked). Continuing."
+        }
+    }
+}
+
+function Stop-StaleDevProcesses {
+    param(
+        [string]$BackendPath,
+        [string]$FrontendPath
+    )
+
+    Write-Step "Stopping stale Shyara dev node processes"
+    $stoppedAny = $false
+    $escapedBackend = [Regex]::Escape($BackendPath)
+    $escapedFrontend = [Regex]::Escape($FrontendPath)
+
+    $candidates = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+        Where-Object {
+            $_.CommandLine -and (
+                ($_.CommandLine -match $escapedBackend -and $_.CommandLine -match "tsx(\.cmd)?\s+watch") -or
+                ($_.CommandLine -match $escapedFrontend -and $_.CommandLine -match "vite")
+            )
+        }
+
+    foreach ($proc in $candidates) {
+        try {
+            Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+            Write-Ok "Stopped PID $($proc.ProcessId)"
+            $stoppedAny = $true
+        }
+        catch {
+            Write-Warn "Could not stop PID $($proc.ProcessId)"
+        }
+    }
+
+    if (-not $stoppedAny) {
+        Write-Ok "No stale Shyara dev node processes found"
+    }
+}
+
 function Ensure-DockerReady {
     Write-Step "Checking Docker daemon"
     docker info *> $null
@@ -267,9 +335,12 @@ if ($InstallOnly) {
     exit 0
 }
 
+Stop-StaleDevProcesses -BackendPath $Backend -FrontendPath $Frontend
+Clear-ViteCaches -FrontendPath $Frontend
+
 Write-Step "Launching backend and frontend"
 $backendCmd = "Set-Location '$Backend'; npm run dev"
-$frontendCmd = "Set-Location '$Frontend'; npm run dev"
+$frontendCmd = "Set-Location '$Frontend'; npm run dev -- --force --strictPort --port 8080"
 
 if (Get-Command wt -ErrorAction SilentlyContinue) {
     $wtArgs = "new-tab --title `"Shyara Backend`" powershell -NoExit -Command `"$backendCmd`" ; split-pane --title `"Shyara Frontend`" powershell -NoExit -Command `"$frontendCmd`""

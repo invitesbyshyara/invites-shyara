@@ -11,6 +11,9 @@ node_modules
 # Build outputs
 dist
 dist-ssr
+frontend/.vite-cache/
+frontend/dist-check*/
+frontend/dist-check/
 
 # OS
 Thumbs.db
