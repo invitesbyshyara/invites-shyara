@@ -17,6 +17,7 @@ import sweetArrival from './baby-shower/sweet-arrival/config';
 import executiveEdge from './corporate/executive-edge/config';
 import modernSummit from './corporate/modern-summit/config';
 import timelessLove from './anniversary/timeless-love/config';
+import velvetThreeD from './wedding/velvet-3d/config';
 
 export const allTemplates: TemplateConfig[] = [
   royalGold,
@@ -34,6 +35,7 @@ export const allTemplates: TemplateConfig[] = [
   executiveEdge,
   modernSummit,
   timelessLove,
+  velvetThreeD,
 ];
 
 export const getTemplateBySlug = (slug: string): TemplateConfig | undefined =>
