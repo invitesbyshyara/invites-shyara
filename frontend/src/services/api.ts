@@ -7,9 +7,19 @@ type ApiResponse<T> = {
   error?: string;
 };
 
+class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 const ACCESS_TOKEN_KEY = "shyara_access_token";
 const CACHED_USER_KEY = "shyara_user";
-const apiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:3000";
+export const apiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:3000";
 const API_BASE = apiUrl.endsWith("/api") ? apiUrl : `${apiUrl}/api`;
 
 const inviteSlugMap = new Map<string, string>();
@@ -82,7 +92,7 @@ const request = async <T>(
   allowRetry = true,
 ): Promise<T> => {
   const headers = new Headers(options.headers ?? {});
-  let body = options.body;
+  const body = options.body;
 
   if (body && !(body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -113,7 +123,7 @@ const request = async <T>(
 
   const payload = await parsePayload<T>(res);
   if (!res.ok || !payload?.success) {
-    throw new Error(payload?.error ?? "Request failed");
+    throw new ApiError(payload?.error ?? "Request failed", res.status);
   }
 
   return payload.data;
@@ -390,7 +400,16 @@ export const api = {
 
   submitRsvp: async (
     inviteId: string,
-    data: { name: string; response: "yes" | "no" | "maybe"; guestCount: number; message: string; email?: string },
+    data: {
+      name: string;
+      response: "yes" | "no" | "maybe";
+      guestCount: number;
+      message: string;
+      email?: string;
+      mealPreference?: string;
+      dietaryRestrictions?: string;
+      _hp?: string;
+    },
   ) => {
     const slug = inviteSlugMap.get(inviteId);
     if (!slug) {
@@ -401,6 +420,34 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     });
+  },
+
+  getRsvpConfig: async (inviteId: string): Promise<{ mealOptions: string[]; rsvpDeadline?: string }> => {
+    return request<{ mealOptions: string[]; rsvpDeadline?: string }>(`/public/invites/${inviteId}/rsvp-config`);
+  },
+
+  trackView: async (slug: string): Promise<void> => {
+    const ua = navigator.userAgent;
+    const deviceType = /Mobi|Android/i.test(ua) ? "mobile" : /Tablet|iPad/i.test(ua) ? "tablet" : "desktop";
+    try {
+      await request<{ ok: boolean }>(`/public/invites/${slug}/view`, {
+        method: "POST",
+        body: JSON.stringify({ deviceType, referrer: document.referrer }),
+      });
+    } catch {
+      // View tracking is non-critical — swallow errors
+    }
+  },
+
+  getInviteAnalytics: async (inviteId: string) => {
+    return request<{
+      viewCount: number;
+      rsvpCount: number;
+      yesCount: number;
+      conversionRate: number;
+      deviceBreakdown: { mobile: number; desktop: number; tablet: number };
+      referrerBreakdown: { direct: number; whatsapp: number; facebook: number; other: number };
+    }>(`/invites/${inviteId}/analytics`, {}, true);
   },
 
   login: async (email: string, password: string) => {

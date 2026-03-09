@@ -6,6 +6,10 @@ import { api } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Invite } from '@/types';
+import ShareMenu from '@/components/ShareMenu';
+import QRCodeCard from '@/components/QRCodeCard';
+import { apiUrl as apiBaseUrl } from '@/services/api';
+import { buildShareMessage } from '@/utils/share';
 
 const statusStyles: Record<string, string> = {
   published: 'bg-accent text-accent-foreground',
@@ -21,7 +25,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const inviteBaseUrl = `${window.location.origin}/i`;
+  const [shareInviteId, setShareInviteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) { navigate('/login'); return; }
@@ -30,11 +34,6 @@ const Dashboard = () => {
 
   const totalRsvps = invites.reduce((sum, i) => sum + i.rsvpCount, 0);
   const activeInvites = invites.filter(i => i.status === 'published').length;
-
-  const handleCopyLink = (slug: string) => {
-    navigator.clipboard.writeText(`${inviteBaseUrl}/${slug}`);
-    toast({ title: 'Link copied!', description: 'Share it with your guests.' });
-  };
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -143,15 +142,12 @@ const Dashboard = () => {
                   </p>
 
                   {inv.status === 'published' && inv.slug && (
-                    <button
-                      onClick={() => handleCopyLink(inv.slug)}
-                      className="w-full text-left text-xs text-gold font-body mb-4 truncate hover:underline cursor-pointer"
-                    >
-                      📋 {inviteBaseUrl.replace(window.location.origin, '')}/{inv.slug}
-                    </button>
+                    <p className="text-xs text-gold font-body mb-3 truncate">
+                      /i/{inv.slug}
+                    </p>
                   )}
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button asChild size="sm" variant="outline" className="flex-1 text-xs font-body">
                       <Link to={inv.status === 'draft' ? `/create/${inv.id}` : `/dashboard/invites/${inv.id}/edit`}>
                         Edit
@@ -164,6 +160,14 @@ const Dashboard = () => {
                         </Button>
                         <Button asChild size="sm" variant="outline" className="flex-1 text-xs font-body">
                           <Link to={`/dashboard/invites/${inv.id}/rsvps`}>RSVPs</Link>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-xs font-body"
+                          onClick={() => setShareInviteId(inv.id)}
+                        >
+                          Share
                         </Button>
                       </>
                     )}
@@ -182,6 +186,37 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Share modal */}
+      {shareInviteId && (() => {
+        const inv = invites.find(i => i.id === shareInviteId);
+        if (!inv?.slug) return null;
+        const inviteUrl = `${window.location.origin}/i/${inv.slug}`;
+        const shareUrl = `${apiBaseUrl}/share/${inv.slug}`;
+        const eventType = inv.templateCategory?.replace(/[_-]/g, ' ') ?? 'event';
+        const message = buildShareMessage(inv.data as Record<string, unknown>, eventType, inviteUrl);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 backdrop-blur-sm px-4">
+            <div className="bg-card rounded-xl border border-border p-6 max-w-sm w-full shadow-xl animate-scale-in">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-display text-lg font-semibold">Share Invitation</h3>
+                <button
+                  onClick={() => setShareInviteId(null)}
+                  className="text-muted-foreground hover:text-foreground text-xl leading-none"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground font-body mb-3 break-all">{inviteUrl}</p>
+              <ShareMenu shareUrl={shareUrl} inviteUrl={inviteUrl} message={message} variant="stack" />
+              <div className="mt-4 flex justify-center">
+                <QRCodeCard url={inviteUrl} label={`/i/${inv.slug}`} size={180} />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Delete confirmation modal */}
       {deleteId && (

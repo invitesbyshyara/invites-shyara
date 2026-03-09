@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, X, ChevronUp } from "lucide-react";
 import TemplateThumbnail from "@/components/TemplateThumbnail";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { allTemplates } from "@/templates/registry";
+import { allTemplates, getTemplateRenderer } from "@/templates/registry";
 import { api } from "@/services/api";
 import { TemplateConfig } from "@/types";
 
@@ -29,6 +29,9 @@ const Checkout = () => {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewInputs, setPreviewInputs] = useState<Record<string, string>>({});
 
   const [promoExpanded, setPromoExpanded] = useState(false);
   const [promoInput, setPromoInput] = useState("");
@@ -53,6 +56,16 @@ const Checkout = () => {
       navigate(`/login?next=/checkout/${slug}`);
     }
   }, [loading, isAuthenticated, navigate, slug]);
+
+  const TemplateRenderer = useMemo(
+    () => template ? getTemplateRenderer(template.category, template.slug) : null,
+    [template],
+  );
+
+  const previewFields = useMemo(
+    () => template?.fields.filter(f => f.section === 'basic' && ['text', 'date'].includes(f.type)).slice(0, 4) ?? [],
+    [template],
+  );
 
   const basePrice = template ? (currency === "USD" ? template.priceUsd : template.priceEur) : 0;
   const discount = !appliedPromo
@@ -101,7 +114,11 @@ const Checkout = () => {
       );
 
       if (order.free) {
-        navigate("/dashboard");
+        if (order.inviteId) {
+          navigate(`/dashboard/invites/${order.inviteId}/edit`);
+        } else {
+          navigate("/dashboard");
+        }
         return;
       }
 
@@ -120,16 +137,16 @@ const Checkout = () => {
           razorpay_signature: string;
         }) => {
           try {
-            const result = await api.verifyPayment({
-              razorpayPaymentId: response.razorpay_payment_id,
-              razorpayOrderId: response.razorpay_order_id,
-              razorpaySignature: response.razorpay_signature,
-            });
-            navigate(`/invite/${result.inviteId}/edit`);
-          } catch {
-            setPayError("Payment verification failed. Please contact support if the amount was deducted.");
-            setPaying(false);
-          }
+              const result = await api.verifyPayment({
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpayOrderId: response.razorpay_order_id,
+                razorpaySignature: response.razorpay_signature,
+              });
+              navigate(`/dashboard/invites/${result.inviteId}/edit`);
+            } catch {
+              setPayError("Payment verification failed. Please contact support if the amount was deducted.");
+              setPaying(false);
+            }
         },
         modal: {
           ondismiss: () => setPaying(false),
@@ -165,7 +182,7 @@ const Checkout = () => {
 
       <div className="container max-w-2xl py-12 px-4">
         <h1 className="font-display text-3xl font-bold text-center mb-10">
-          {template.isPremium ? "Complete Your Purchase" : "Confirm Your Template"}
+          Complete Your Purchase
         </h1>
 
         {/* Template card */}
@@ -179,14 +196,67 @@ const Checkout = () => {
               {template.category.replace("-", " ")}
             </p>
             <p className="text-2xl font-display font-bold text-gold">
-              {template.isPremium ? formatPrice(basePrice) : "Free"}
+              {formatPrice(basePrice)}
             </p>
           </div>
         </div>
 
+        {/* Personalised preview */}
+        {TemplateRenderer && (
+          <div className="rounded-xl border border-border bg-card mb-8 overflow-hidden">
+            <button
+              onClick={() => setPreviewOpen(o => !o)}
+              className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-muted/30 transition-colors"
+            >
+              <div>
+                <p className="font-display font-semibold">Personalise Your Preview</p>
+                <p className="text-xs text-muted-foreground font-body mt-0.5">See how your invite looks before you pay</p>
+              </div>
+              {previewOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
+            </button>
+
+            {previewOpen && (
+              <div className="border-t border-border">
+                {previewFields.length > 0 && (
+                  <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {previewFields.map(f => (
+                      <div key={f.key}>
+                        <label className="block text-xs font-body text-muted-foreground mb-1">{f.label}</label>
+                        <input
+                          type={f.type === 'date' ? 'date' : 'text'}
+                          placeholder={f.placeholder ?? f.label}
+                          value={previewInputs[f.key] ?? ''}
+                          onChange={e => setPreviewInputs(prev => ({ ...prev, [f.key]: e.target.value }))}
+                          className="w-full px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="relative" style={{ height: 360, overflow: 'hidden' }}>
+                  <div style={{ transform: 'scale(0.28)', transformOrigin: 'top center', width: '357%', pointerEvents: 'none' }}>
+                    <Suspense fallback={null}>
+                      <TemplateRenderer
+                        config={template!}
+                        data={{ ...template!.dummyData, ...previewInputs }}
+                        isPreview
+                      />
+                    </Suspense>
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <p className="-rotate-12 text-white font-display text-2xl font-bold opacity-70 select-none drop-shadow-lg tracking-widest">
+                      PREVIEW
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Promo code section */}
-        {template.isPremium && (
-          <div className="p-6 rounded-xl border border-border bg-card mb-8">
+        <div className="p-6 rounded-xl border border-border bg-card mb-8">
             <h3 className="font-display font-semibold mb-4">Promo Code</h3>
             {!appliedPromo ? (
               <>
@@ -235,7 +305,6 @@ const Checkout = () => {
               </div>
             )}
           </div>
-        )}
 
         {/* Order summary */}
         <div className="p-6 rounded-xl border border-border bg-card mb-8">
@@ -243,28 +312,24 @@ const Checkout = () => {
           <div className="flex justify-between font-body text-sm mb-2">
             <span className="text-muted-foreground">{template.name} template</span>
             <span className={`font-medium ${appliedPromo ? "line-through text-muted-foreground" : ""}`}>
-              {template.isPremium ? formatPrice(basePrice) : "Free"}
+              {formatPrice(basePrice)}
             </span>
           </div>
-          {appliedPromo && template.isPremium && (
+          {appliedPromo && (
             <div className="flex justify-between font-body text-sm mb-2">
               <span className="text-primary">Promo code ({appliedPromo.code})</span>
               <span className="text-primary font-medium">-{formatPrice(discount)}</span>
             </div>
           )}
-          {template.isPremium && (
-            <>
-              <div className="flex justify-between font-body text-sm mb-2">
-                <span className="text-muted-foreground">Tax</span>
-                <span className="font-medium">{symbol}0.00</span>
-              </div>
-              <div className="border-t border-border my-3" />
-              <div className="flex justify-between font-body text-sm font-semibold">
-                <span>Total</span>
-                <span className="text-gold">{formatPrice(finalPrice)}</span>
-              </div>
-            </>
-          )}
+          <div className="flex justify-between font-body text-sm mb-2">
+            <span className="text-muted-foreground">Tax</span>
+            <span className="font-medium">{symbol}0.00</span>
+          </div>
+          <div className="border-t border-border my-3" />
+          <div className="flex justify-between font-body text-sm font-semibold">
+            <span>Total</span>
+            <span className="text-gold">{formatPrice(finalPrice)}</span>
+          </div>
         </div>
 
         {/* Pay button */}
@@ -276,11 +341,7 @@ const Checkout = () => {
           onClick={handlePay}
           disabled={paying}
         >
-          {paying
-            ? "Processing..."
-            : template.isPremium
-              ? `Pay ${formatPrice(finalPrice)}`
-              : "Get Template — Free"}
+          {paying ? "Processing..." : `Pay ${formatPrice(finalPrice)}`}
         </Button>
 
         <p className="text-center text-xs text-muted-foreground font-body mt-4">

@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import FieldRenderer from './FieldRenderer';
 import SlugPicker from './SlugPicker';
 import PhoneMockup from '@/components/PhoneMockup';
+import { CURATED_TRACKS as MUSIC_TRACKS } from '@/constants/musicTracks';
 
 const SECTION_META: Record<string, { label: string; description: string }> = {
   story:    { label: 'Story / Description', description: 'Share your love story or event description' },
@@ -99,7 +100,7 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
       if (f.required && (!val || (typeof val === 'string' && !val.trim()))) {
         errs[f.key] = `${f.label} is required`;
       }
-      if (f.type === 'date' && val && val < today) {
+      if (f.type === 'date' && val && val < today && !isEditing) {
         errs[f.key] = 'Date must be in the future';
       }
     });
@@ -287,6 +288,206 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
         {currentStep < 3 ? (
           <>
             {renderStepFields()}
+
+            {/* ── Step 2: Venue & Story — built-in panels ── */}
+            {currentStep === 1 && (
+              <>
+                {/* Video embed */}
+                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                  <div className="px-6 pt-6 pb-1">
+                    <h3 className="font-display text-base font-semibold">Video</h3>
+                    <p className="text-xs text-muted-foreground font-body mt-0.5">Add a YouTube or Vimeo video to your invite (optional)</p>
+                  </div>
+                  <div className="p-6">
+                    <input
+                      type="url"
+                      placeholder="https://youtu.be/... or https://vimeo.com/..."
+                      value={(formData.videoUrl as string | undefined) ?? ''}
+                      onChange={e => handleFieldChange('videoUrl', e.target.value || undefined)}
+                      className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <p className="text-xs text-muted-foreground font-body mt-1">Paste a YouTube or Vimeo link. Guests can watch it on your invite page.</p>
+                  </div>
+                </div>
+
+                {/* Gifts & Registry */}
+                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                  <div className="px-6 pt-6 pb-1">
+                    <h3 className="font-display text-base font-semibold">Gifts &amp; Registry</h3>
+                    <p className="text-xs text-muted-foreground font-body mt-0.5">Link to gift registries or wish lists (optional, up to 5)</p>
+                  </div>
+                  <div className="p-6 space-y-3">
+                    {((formData.registryLinks as Array<{ title: string; url: string }> | undefined) ?? []).map((link, i) => (
+                      <div key={i} className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Label (e.g. Amazon Wishlist)"
+                          value={link.title}
+                          onChange={e => {
+                            const links = [...((formData.registryLinks as Array<{ title: string; url: string }>) ?? [])];
+                            links[i] = { ...links[i], title: e.target.value };
+                            handleFieldChange('registryLinks', links);
+                          }}
+                          className="flex-1 px-3 py-2.5 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        <input
+                          type="url"
+                          placeholder="URL"
+                          value={link.url}
+                          onChange={e => {
+                            const links = [...((formData.registryLinks as Array<{ title: string; url: string }>) ?? [])];
+                            links[i] = { ...links[i], url: e.target.value };
+                            handleFieldChange('registryLinks', links);
+                          }}
+                          className="flex-1 px-3 py-2.5 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const links = ((formData.registryLinks as Array<{ title: string; url: string }>) ?? []).filter((_, j) => j !== i);
+                            handleFieldChange('registryLinks', links.length > 0 ? links : undefined);
+                          }}
+                          className="px-2 text-muted-foreground hover:text-destructive transition-colors font-body"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {((formData.registryLinks as Array<unknown> | undefined) ?? []).length < 5 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const links = [...((formData.registryLinks as Array<{ title: string; url: string }>) ?? []), { title: '', url: '' }];
+                          handleFieldChange('registryLinks', links);
+                        }}
+                        className="text-sm font-body text-primary hover:text-primary/80 transition-colors"
+                      >
+                        + Add Registry
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Travel & Accommodation */}
+                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                  <div className="px-6 pt-6 pb-1">
+                    <h3 className="font-display text-base font-semibold">Travel &amp; Accommodation</h3>
+                    <p className="text-xs text-muted-foreground font-body mt-0.5">Suggest hotels or accommodation near the venue (optional, up to 5)</p>
+                  </div>
+                  <div className="p-6 space-y-4">
+                    {((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }> | undefined) ?? []).map((entry, i) => (
+                      <div key={i} className="space-y-2 p-4 rounded-lg border border-border bg-muted/20 relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const list = ((formData.accommodations as Array<unknown>) ?? []).filter((_, j) => j !== i);
+                            handleFieldChange('accommodations', list.length > 0 ? list : undefined);
+                          }}
+                          className="absolute top-3 right-3 text-muted-foreground hover:text-destructive transition-colors font-body text-lg leading-none"
+                        >
+                          ×
+                        </button>
+                        <input type="text" placeholder="Hotel name *" value={entry.name}
+                          onChange={e => { const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? [])]; list[i] = { ...list[i], name: e.target.value }; handleFieldChange('accommodations', list); }}
+                          className="w-full px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                        <input type="text" placeholder="Address *" value={entry.address}
+                          onChange={e => { const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? [])]; list[i] = { ...list[i], address: e.target.value }; handleFieldChange('accommodations', list); }}
+                          className="w-full px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="url" placeholder="Booking link (optional)" value={entry.link ?? ''}
+                            onChange={e => { const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? [])]; list[i] = { ...list[i], link: e.target.value || undefined }; handleFieldChange('accommodations', list); }}
+                            className="px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                          <input type="text" placeholder="Group code (optional)" value={entry.groupCode ?? ''}
+                            onChange={e => { const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? [])]; list[i] = { ...list[i], groupCode: e.target.value || undefined }; handleFieldChange('accommodations', list); }}
+                            className="px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                        </div>
+                        <input type="text" placeholder="Description (optional)" value={entry.description ?? ''}
+                          onChange={e => { const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? [])]; list[i] = { ...list[i], description: e.target.value || undefined }; handleFieldChange('accommodations', list); }}
+                          className="w-full px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                      </div>
+                    ))}
+                    {((formData.accommodations as Array<unknown> | undefined) ?? []).length < 5 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? []), { name: '', address: '' }];
+                          handleFieldChange('accommodations', list);
+                        }}
+                        className="text-sm font-body text-primary hover:text-primary/80 transition-colors"
+                      >
+                        + Add Hotel / Accommodation
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Step 3: Media & Schedule — built-in panels ── */}
+            {currentStep === 2 && (
+              <>
+                {/* Background Music — only for templates that have the enableMusic field */}
+                {config.fields.some(f => f.key === 'enableMusic') && (
+                  <div className="rounded-xl border border-border bg-card overflow-hidden">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                      <div>
+                        <h3 className="font-display text-base font-semibold">Background Music</h3>
+                        <p className="text-xs text-muted-foreground font-body mt-0.5">Play soft music when guests open your invite</p>
+                      </div>
+                      <Switch
+                        checked={!!(formData.enableMusic)}
+                        onCheckedChange={v => handleFieldChange('enableMusic', v)}
+                      />
+                    </div>
+                    {formData.enableMusic && (
+                      <div className="p-6">
+                        <label className="block text-sm font-body font-medium mb-1.5">Select a track</label>
+                        <select
+                          value={(formData.musicUrl as string | undefined) ?? ''}
+                          onChange={e => handleFieldChange('musicUrl', e.target.value || undefined)}
+                          className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          <option value="">Choose a track…</option>
+                          {MUSIC_TRACKS.map(t => (
+                            <option key={t.url} value={t.url}>{t.name}</option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-muted-foreground font-body mt-1">Music plays after the first tap — guests can mute it anytime.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* RSVP Options */}
+                {enabledSections.includes('rsvp') && (
+                  <div className="rounded-xl border border-border bg-card overflow-hidden">
+                    <div className="px-6 pt-6 pb-1">
+                      <h3 className="font-display text-base font-semibold">RSVP Options</h3>
+                      <p className="text-xs text-muted-foreground font-body mt-0.5">Optional extras for your RSVP form</p>
+                    </div>
+                    <div className="p-6 space-y-4">
+                      <div>
+                        <label className="block text-sm font-body font-medium mb-1.5">Meal Options</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Vegetarian, Non-Veg, Vegan"
+                          value={(formData.mealOptions as string[] | undefined)?.join(', ') ?? ''}
+                          onChange={e => {
+                            const opts = e.target.value
+                              .split(',')
+                              .map(s => s.trim())
+                              .filter(Boolean);
+                            handleFieldChange('mealOptions', opts.length > 0 ? opts : undefined);
+                          }}
+                          className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        <p className="text-xs text-muted-foreground font-body mt-1">Separate options with commas. Leave blank to hide the meal field.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </>
         ) : (
           /* Step 4: Review & Publish */
@@ -333,6 +534,44 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
               <h3 className="font-display text-lg font-semibold mb-5">Shareable Link</h3>
               <SlugPicker value={slug} onChange={setSlug} suggestion={slugSuggestion} />
             </div>
+
+            {/* Post-Event Mode — shown when editing a past event */}
+            {isEditing && (() => {
+              const eventDateStr = (formData.eventDate ?? formData.weddingDate ?? formData.partyDate ?? '') as string;
+              const isPast = eventDateStr && eventDateStr < new Date().toISOString().split('T')[0];
+              if (!isPast) return null;
+              return (
+                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                    <div>
+                      <h3 className="font-display text-base font-semibold">Post-Event Mode</h3>
+                      <p className="text-xs text-muted-foreground font-body mt-0.5">
+                        Your event has passed — switch to a thank-you page for guests
+                      </p>
+                    </div>
+                    <Switch
+                      checked={!!(formData.postEventMode)}
+                      onCheckedChange={v => handleFieldChange('postEventMode', v)}
+                    />
+                  </div>
+                  {formData.postEventMode && (
+                    <div className="p-6">
+                      <label className="block text-sm font-body font-medium mb-1.5">Thank-you message</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Thank you for celebrating with us!"
+                        value={(formData.thankYouMessage as string | undefined) ?? ''}
+                        onChange={e => handleFieldChange('thankYouMessage', e.target.value || undefined)}
+                        className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                      />
+                      <p className="text-xs text-muted-foreground font-body mt-1">
+                        Shown to guests instead of the RSVP form. The RSVP section is hidden automatically.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 

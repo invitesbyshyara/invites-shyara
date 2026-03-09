@@ -2,15 +2,16 @@ import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { api } from '@/services/api';
-import { useToast } from '@/hooks/use-toast';
 import { Invite } from '@/types';
+import ShareMenu from '@/components/ShareMenu';
+import QRCodeCard from '@/components/QRCodeCard';
+import { apiUrl as apiBaseUrl } from '@/services/api';
+import { buildShareMessage } from '@/utils/share';
 
 const PublishSuccess = () => {
   const { inviteId } = useParams<{ inviteId: string }>();
-  const { toast } = useToast();
   const [invite, setInvite] = useState<Invite | null>(null);
   const [loading, setLoading] = useState(true);
-  const inviteBaseUrl = `${window.location.origin}/i`;
 
   useEffect(() => {
     if (!inviteId) return;
@@ -20,21 +21,20 @@ const PublishSuccess = () => {
       .finally(() => setLoading(false));
   }, [inviteId]);
 
+  // Direct invite URL for copy/display — what guests actually visit
+  const inviteUrl = invite?.slug
+    ? `${window.location.origin}/i/${invite.slug}`
+    : `${window.location.origin}/i/your-invite`;
+
+  // Backend share URL — used for social sharing so crawlers get OG meta tags
   const shareUrl = invite?.slug
-    ? `${inviteBaseUrl}/${invite.slug}`
-    : `${inviteBaseUrl}/your-invite`;
+    ? `${apiBaseUrl}/share/${invite.slug}`
+    : inviteUrl;
 
   const previewPath = invite?.slug ? `/i/${invite.slug}` : '/i/demo-invite';
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(shareUrl);
-    toast({ title: 'Link copied!', description: 'Share it with your guests.' });
-  };
-
-  const handleWhatsApp = () => {
-    const text = encodeURIComponent(`You're invited! Open your invitation here: ${shareUrl}`);
-    window.open(`https://wa.me/?text=${text}`, '_blank');
-  };
+  const eventType = invite?.templateCategory?.replace(/[_-]/g, ' ') ?? 'event';
+  const shareMessage = buildShareMessage(invite?.data as Record<string, unknown> | undefined, eventType, inviteUrl);
 
   if (loading) {
     return (
@@ -53,8 +53,9 @@ const PublishSuccess = () => {
         <h1 className="font-display text-3xl font-bold mb-2">Your invitation is live!</h1>
         <p className="text-muted-foreground font-body mb-8">Share this link with your guests and watch the RSVPs roll in</p>
 
+        {/* Invite URL display */}
         <div className="p-4 rounded-xl bg-card border border-border mb-2">
-          <p className="text-sm font-body text-gold font-medium break-all">{shareUrl}</p>
+          <p className="text-sm font-body text-gold font-medium break-all">{inviteUrl}</p>
         </div>
 
         {invite?.slug && (
@@ -66,32 +67,27 @@ const PublishSuccess = () => {
           </Link>
         )}
 
-        <div className="flex flex-col gap-3 mt-6">
-          <Button className="w-full h-11 font-body" onClick={handleCopy}>
-            📋 Copy Link
-          </Button>
-          <Button
-            variant="outline"
-            className="w-full h-11 font-body"
-            onClick={handleWhatsApp}
-          >
-            💬 Share via WhatsApp
-          </Button>
-          <Button
-            variant="outline"
-            className="w-full h-11 font-body"
-            onClick={() => {
-              if (navigator.share) {
-                navigator.share({ title: 'You\'re Invited!', url: shareUrl });
-              }
-            }}
-          >
-            📤 Share via Other Apps
-          </Button>
+        <div className="mt-6">
+          <ShareMenu
+            shareUrl={shareUrl}
+            inviteUrl={inviteUrl}
+            message={shareMessage}
+            variant="stack"
+          />
           <Button asChild variant="ghost" className="w-full font-body mt-2">
             <Link to="/dashboard">Go to Dashboard</Link>
           </Button>
         </div>
+
+        {/* QR Code — save and print for physical sharing */}
+        {invite?.slug && (
+          <div className="mt-8">
+            <QRCodeCard
+              url={inviteUrl}
+              label={inviteUrl.replace(window.location.origin, '')}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

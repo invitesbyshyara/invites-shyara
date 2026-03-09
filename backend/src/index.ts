@@ -13,6 +13,7 @@ import templateRoutes from "./routes/templates";
 import inviteRoutes from "./routes/invites";
 import publicRoutes from "./routes/public";
 import checkoutRoutes from "./routes/checkout";
+import shareRoutes from "./routes/share";
 import adminAuthRoutes from "./routes/admin/auth";
 import adminDashboardRoutes from "./routes/admin/dashboard";
 import adminCustomerRoutes from "./routes/admin/customers";
@@ -28,6 +29,7 @@ import adminSearchRoutes from "./routes/admin/search";
 import adminAdminsRoutes from "./routes/admin/admins";
 import adminAuditLogsRoutes from "./routes/admin/audit-logs";
 import { errorHandler } from "./middleware/errorHandler";
+import { startRsvpReminderJob } from "./jobs/rsvpReminders";
 
 const app = express();
 const allowedOrigins = [env.FRONTEND_URL, env.ADMIN_PORTAL_URL ?? env.FRONTEND_URL];
@@ -63,7 +65,7 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) {
-        callback(new Error("Origin required"), false);
+        callback(null, true);
         return;
       }
 
@@ -131,6 +133,12 @@ app.use("/api/invites", inviteRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/checkout", checkoutRoutes);
 
+// Public share pages — no CORS restriction, returns HTML for OG crawler previews
+app.use("/share", (_req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  next();
+}, shareRoutes);
+
 app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admin/dashboard", adminDashboardRoutes);
 app.use("/api/admin/customers", adminCustomerRoutes);
@@ -157,6 +165,7 @@ app.use(errorHandler);
 
 const server = app.listen(env.PORT, () => {
   logger.info(`Backend running on port ${env.PORT}`);
+  startRsvpReminderJob();
 });
 
 let isShuttingDown = false;
