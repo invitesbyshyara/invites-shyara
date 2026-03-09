@@ -23,6 +23,7 @@ const themes: Record<string, {
   'executive-edge': { bg: 'linear-gradient(160deg, hsl(220,15%,12%) 0%, hsl(220,20%,8%) 100%)', accent: 'hsl(210,70%,55%)', text: 'hsl(0,0%,92%)', sub: 'hsl(220,10%,50%)' },
   'modern-summit': { bg: 'linear-gradient(160deg, hsl(0,0%,98%) 0%, hsl(220,10%,95%) 100%)', accent: 'hsl(220,80%,50%)', text: 'hsl(220,25%,15%)', sub: 'hsl(220,10%,55%)' },
   'timeless-love': { bg: 'linear-gradient(160deg, hsl(20,35%,94%) 0%, hsl(15,30%,90%) 100%)', accent: 'hsl(20,60%,45%)', text: 'hsl(20,40%,20%)', sub: 'hsl(20,15%,50%)' },
+  'velvet-3d':     { bg: 'linear-gradient(160deg, hsl(340,18%,7%) 0%, hsl(340,20%,11%) 100%)', accent: 'hsl(38,65%,58%)', text: 'hsl(38,70%,72%)', sub: 'hsl(340,12%,50%)' },
 };
 
 const categoryEmoji: Record<EventCategory, string> = {
@@ -51,7 +52,7 @@ const TemplateThumbnail = ({ config, className = '' }: Props) => {
     accent: 'hsl(220,60%,50%)', text: 'hsl(220,30%,20%)', sub: 'hsl(220,10%,50%)',
   };
 
-  const isDark = config.slug.includes('gold') || config.slug.includes('midnight') || config.slug.includes('celestial') || config.slug.includes('neon') || config.slug.includes('executive');
+  const isDark = config.slug.includes('gold') || config.slug.includes('midnight') || config.slug.includes('celestial') || config.slug.includes('neon') || config.slug.includes('executive') || config.slug.includes('velvet');
 
   return (
     <div className={`w-full h-full flex flex-col items-center justify-center p-6 relative overflow-hidden select-none ${className}`} style={{ background: t.bg }}>
