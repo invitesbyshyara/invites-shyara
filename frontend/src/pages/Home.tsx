@@ -556,7 +556,7 @@ const Home = () => {
                 <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent-foreground/10 transition-colors">
                   <Youtube className="w-4 h-4" />
                 </a>
-                <a href="mailto:hello@shyara.com" className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent-foreground/10 transition-colors">
+                <a href="mailto:support@invitesbyshyara.com" className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent-foreground/10 transition-colors">
                   <Mail className="w-4 h-4" />
                 </a>
               </div>

@@ -89,7 +89,7 @@ const Privacy = () => (
           <p className="text-muted-foreground leading-relaxed">
             You have the right to access, correct, or delete your personal data. You can manage most settings
             directly in your account. To exercise other rights or for any privacy queries, contact us at{' '}
-            <a href="mailto:privacy@shyara.co.in" className="text-primary hover:underline">privacy@shyara.co.in</a>.
+            <a href="mailto:support@invitesbyshyara.com" className="text-primary hover:underline">support@invitesbyshyara.com</a>.
           </p>
         </section>
 

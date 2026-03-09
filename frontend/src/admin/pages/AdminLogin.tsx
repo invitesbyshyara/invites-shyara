@@ -33,7 +33,7 @@ const AdminLogin: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@shyara.co.in" required />
+            <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="support@invitesbyshyara.com" required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
