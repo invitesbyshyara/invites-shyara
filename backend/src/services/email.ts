@@ -214,6 +214,88 @@ export const sendAnnouncementEmail = async (
   await send(email, safeTitle, buildEmail(body, unsubscribeUrl));
 };
 
+export const sendRsvpDeadlineReminderEmail = async (
+  email: string,
+  opts: {
+    hostName: string;
+    inviteName: string;
+    daysLeft: number;
+    deadline: string;
+    totalRsvps: number;
+    yesCount: number;
+    dashboardUrl: string;
+  },
+) => {
+  const { hostName, inviteName, daysLeft, deadline, totalRsvps, yesCount, dashboardUrl } = opts;
+  const deadlineFormatted = new Date(deadline).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const dayLabel = daysLeft === 1 ? "1 day" : `${daysLeft} days`;
+
+  const body = `
+    <h2>RSVP Deadline Reminder</h2>
+    <p>Hi ${DOMPurify.sanitize(hostName)},</p>
+    <p>
+      Your RSVP deadline for <strong>${DOMPurify.sanitize(inviteName)}</strong> is
+      <strong>${dayLabel} away</strong> (${deadlineFormatted}).
+    </p>
+    <p>Here's a summary of responses received so far:</p>
+    <table style="width:100%;border-collapse:collapse;margin:12px 0;">
+      <tr>
+        <td style="padding:10px 16px;background:#f9f5f2;border-radius:8px;font-size:14px;">
+          <strong style="font-size:28px;">${totalRsvps}</strong><br/>Total RSVPs
+        </td>
+        <td style="padding:10px 16px;background:#f9f5f2;border-radius:8px;font-size:14px;margin-left:8px;">
+          <strong style="font-size:28px;">${yesCount}</strong><br/>Attending
+        </td>
+      </tr>
+    </table>
+    <p>
+      <a href="${dashboardUrl}" style="display:inline-block;padding:12px 24px;background:#c06090;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">
+        View All RSVPs
+      </a>
+    </p>
+    <p style="color:#888;font-size:13px;">
+      After ${deadlineFormatted}, new RSVPs will automatically be closed.
+    </p>
+  `;
+  await send(email, `Reminder: RSVP deadline in ${dayLabel} — ${DOMPurify.sanitize(inviteName)}`, buildEmail(body));
+};
+
+export const sendPostEventSuggestionEmail = async (
+  email: string,
+  opts: { hostName: string; inviteName: string; dashboardUrl: string },
+) => {
+  const { hostName, inviteName, dashboardUrl } = opts;
+  const body = `
+    <h2>Your event has passed 🎉</h2>
+    <p>Hi ${DOMPurify.sanitize(hostName)},</p>
+    <p>
+      It looks like <strong>${DOMPurify.sanitize(inviteName)}</strong> has come and gone —
+      congrats on the celebration!
+    </p>
+    <p>
+      Switch your invite to <strong>Post-Event Mode</strong> to show a personalised thank-you
+      message to anyone who visits the link.
+    </p>
+    <p>
+      <a href="${dashboardUrl}" style="display:inline-block;padding:12px 24px;background:#c06090;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">
+        Go to Dashboard
+      </a>
+    </p>
+    <p style="color:#888;font-size:13px;">
+      You can enable Post-Event Mode from the invite editor's Review step.
+    </p>
+  `;
+  await send(
+    email,
+    `Your event has passed — switch to Post-Event Mode`,
+    buildEmail(body),
+  );
+};
+
 export const sendAnnouncementBulk = async (
   recipients: Array<{ email: string; unsubscribeToken?: string }>,
   title: string,
