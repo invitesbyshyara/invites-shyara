@@ -8,6 +8,7 @@ import { validate } from "../middleware/validate";
 import { sendInvitePublishedEmail } from "../services/email";
 import { validateSlugFormat, isInviteSlugAvailable } from "../services/slug";
 import { uploadBufferToCloudinary } from "../services/storage";
+import { env } from "../lib/env";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 
 const router = Router();
@@ -264,7 +265,7 @@ router.put(
     });
 
     if (status === "published" && existing.status !== "published") {
-      const inviteUrl = `${process.env.FRONTEND_URL ?? ""}/i/${updated.slug}`;
+      const inviteUrl = `${env.FRONTEND_URL}/i/${updated.slug}`;
       await sendInvitePublishedEmail(req.user!.email, inviteUrl);
     }
 

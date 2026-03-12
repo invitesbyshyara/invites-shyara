@@ -51,7 +51,6 @@ const Gallery = () => {
     setSearchParams(params);
   };
 
-  const freeCount = templates.filter((template) => !template.isPremium).length;
   const getTemplatePrice = (template: TemplateConfig) =>
     formatPrice(currency === "USD" ? template.priceUsd : template.priceEur);
 
@@ -62,13 +61,6 @@ const Gallery = () => {
       <div className="container py-10 px-4">
         <h1 className="font-serif text-3xl md:text-4xl font-bold text-center mb-2">Template Gallery</h1>
         <p className="text-center text-muted-foreground font-body mb-6">Find the perfect design for your celebration</p>
-
-        {!loading && freeCount > 0 && (
-          <div className="flex items-center justify-center gap-2 py-3 px-6 rounded-xl glass-rose text-sm font-body text-foreground mb-8 max-w-md mx-auto">
-            <Sparkles className="w-4 h-4 text-gold" />
-            <span>{freeCount} free template{freeCount !== 1 ? "s" : ""} available - no payment required!</span>
-          </div>
-        )}
 
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
           <div className="flex flex-wrap gap-2">
@@ -145,19 +137,15 @@ const Gallery = () => {
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-body font-medium bg-card/90 backdrop-blur-sm border border-border capitalize">
                       {template.category.replace("-", " ")}
                     </span>
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-body font-medium backdrop-blur-sm ${
-                        template.isPremium ? "bg-gold/90 text-gold-foreground" : "bg-card/90 border border-border text-foreground"
-                      }`}
-                    >
-                      {template.isPremium ? getTemplatePrice(template) : "Free"}
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-body font-medium backdrop-blur-sm bg-gold/90 text-gold-foreground">
+                      {getTemplatePrice(template)}
                     </span>
                   </div>
                   <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/40 transition-colors duration-300 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 z-10">
                     <Button size="sm" variant="secondary" className="text-xs" asChild>
-                      <a href={`/templates/${template.slug}/preview`} target="_blank" rel="noopener noreferrer">
+                      <Link to={`/templates/${template.slug}/preview`}>
                         <Eye className="w-3.5 h-3.5 mr-1" /> Preview
-                      </a>
+                      </Link>
                     </Button>
                     <Button asChild size="sm" className="text-xs">
                       <Link to={`/checkout/${template.slug}`}>Use This</Link>
@@ -172,7 +160,7 @@ const Gallery = () => {
                       <span className="text-xs text-muted-foreground font-body">{template.tags.slice(0, 2).join(" · ")}</span>
                     </div>
                     <span className="text-xs font-body font-medium text-foreground">
-                      {template.isPremium ? getTemplatePrice(template) : "Free"}
+                      {getTemplatePrice(template)}
                     </span>
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, ArrowRight, Sparkles, LayoutGrid, CreditCard, Eye, Heart } from 'lucide-react';
+import { Menu, X, ArrowRight, Sparkles, LayoutGrid, CreditCard, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 const navLinks = [
   { to: '/templates', label: 'Browse Templates', icon: LayoutGrid },
   { to: '/pricing', label: 'Pricing', icon: CreditCard },
-  { to: '/i/demo-invite', label: 'Live Demo', icon: Eye },
 ];
 
 const MobileNav = () => {
@@ -129,7 +128,7 @@ const MobileNav = () => {
             >
               <Link to="/register">
                 <Sparkles className="w-4 h-4" />
-                Get Started Free
+                Get Started
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </Button>

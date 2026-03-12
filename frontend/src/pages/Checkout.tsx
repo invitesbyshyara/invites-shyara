@@ -10,6 +10,11 @@ import { allTemplates, getTemplateRenderer } from "@/templates/registry";
 import { api } from "@/services/api";
 import { TemplateConfig } from "@/types";
 
+const CHECKOUT_PREVIEW_VIEWPORT_WIDTH = 390;
+const CHECKOUT_PREVIEW_VIEWPORT_HEIGHT = 640;
+const CHECKOUT_PREVIEW_SCALE = 0.72;
+const CHECKOUT_PREVIEW_CONTAINER_HEIGHT = Math.round((CHECKOUT_PREVIEW_VIEWPORT_HEIGHT * CHECKOUT_PREVIEW_SCALE) + 24);
+
 const loadRazorpayScript = (): Promise<void> =>
   new Promise((resolve) => {
     if ((window as any).Razorpay) { resolve(); return; }
@@ -161,10 +166,21 @@ const Checkout = () => {
     }
   };
 
-  if (loading || !template) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!template) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-center px-4">
+        <div>
+          <p className="font-display text-xl font-bold mb-2">Template not found</p>
+          <Link to="/templates" className="text-primary text-sm hover:underline font-body">Browse templates →</Link>
+        </div>
       </div>
     );
   }
@@ -234,15 +250,29 @@ const Checkout = () => {
                   </div>
                 )}
 
-                <div className="relative" style={{ height: 360, overflow: 'hidden' }}>
-                  <div style={{ transform: 'scale(0.28)', transformOrigin: 'top center', width: '357%', pointerEvents: 'none' }}>
-                    <Suspense fallback={null}>
-                      <TemplateRenderer
-                        config={template!}
-                        data={{ ...template!.dummyData, ...previewInputs }}
-                        isPreview
-                      />
-                    </Suspense>
+                <div className="relative overflow-hidden bg-muted/20" style={{ height: CHECKOUT_PREVIEW_CONTAINER_HEIGHT }}>
+                  <div className="flex justify-center pt-3 pointer-events-none select-none">
+                    <div
+                      className="shrink-0"
+                      style={{
+                        width: CHECKOUT_PREVIEW_VIEWPORT_WIDTH,
+                        height: CHECKOUT_PREVIEW_VIEWPORT_HEIGHT,
+                        transform: `scale(${CHECKOUT_PREVIEW_SCALE})`,
+                        transformOrigin: "top center",
+                      }}
+                    >
+                      <Suspense fallback={
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      }>
+                        <TemplateRenderer
+                          config={template!}
+                          data={{ ...template!.dummyData, ...previewInputs }}
+                          isPreview
+                        />
+                      </Suspense>
+                    </div>
                   </div>
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <p className="-rotate-12 text-white font-display text-2xl font-bold opacity-70 select-none drop-shadow-lg tracking-widest">

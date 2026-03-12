@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/services/api';
@@ -9,15 +9,17 @@ import { Rsvp } from '@/types';
 const RsvpManagement = () => {
   const { inviteId } = useParams<{ inviteId: string }>();
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterResponse, setFilterResponse] = useState<string>('all');
 
   useEffect(() => {
+    if (!isAuthenticated) { navigate('/login'); return; }
     if (!inviteId) return;
     api.getRsvps(inviteId).then(setRsvps).finally(() => setLoading(false));
-  }, [inviteId]);
+  }, [inviteId, isAuthenticated, navigate]);
 
   const filtered = rsvps.filter(r => {
     if (filterResponse !== 'all' && r.response !== filterResponse) return false;

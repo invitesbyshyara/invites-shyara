@@ -56,7 +56,7 @@ const Dashboard: React.FC = () => {
 
   const totalRevenue = chartData.reduce((sum, d) => sum + d.revenue, 0);
   const formatAmount = (amountInCents: number, transactionCurrency?: string) => {
-    const symbol = transactionCurrency === 'INR' ? '₹' : currencySymbol;
+    const symbol = currencySymbol;
     return `${symbol}${(amountInCents / 100).toFixed(2)}`;
   };
 
@@ -76,7 +76,7 @@ const Dashboard: React.FC = () => {
         <StatsCard label="Total Users" value={stats!.totalUsers} change={stats!.totalUsersChange} icon={<Users className="h-4 w-4" />} accentColor="hsl(217 91% 60%)" />
         <StatsCard label="Active Invites" value={stats!.activeInvites} change={stats!.activeInvitesChange} icon={<FileText className="h-4 w-4" />} accentColor="hsl(262 83% 58%)" />
         <StatsCard
-          label="Today's Revenue"
+          label="Revenue This Month"
           value={(stats!.todayRevenue / 100).toFixed(2)}
           change={stats!.todayRevenueChange}
           icon={<DollarSign className="h-4 w-4" />}

@@ -4,21 +4,22 @@ import { PrismaClient, DiscountType, EventCategory, AdminRole } from "@prisma/cl
 const prisma = new PrismaClient();
 
 const templates = [
-  { slug: "royal-gold", name: "Royal Gold", category: EventCategory.wedding, isPremium: true, price: 599, priceUsd: 599, priceEur: 549 },
-  { slug: "floral-garden", name: "Floral Garden", category: EventCategory.wedding, isPremium: true, price: 499, priceUsd: 499, priceEur: 449 },
-  { slug: "eternal-vows", name: "Eternal Vows", category: EventCategory.wedding, isPremium: true, price: 549, priceUsd: 549, priceEur: 499 },
-  { slug: "rustic-charm", name: "Rustic Charm", category: EventCategory.wedding, isPremium: false, price: 0, priceUsd: 0, priceEur: 0 },
-  { slug: "celestial-dreams", name: "Celestial Dreams", category: EventCategory.wedding, isPremium: true, price: 599, priceUsd: 599, priceEur: 549 },
-  { slug: "midnight-bloom", name: "Midnight Bloom", category: EventCategory.engagement, isPremium: true, price: 449, priceUsd: 449, priceEur: 399 },
-  { slug: "golden-ring", name: "Golden Ring", category: EventCategory.engagement, isPremium: false, price: 0, priceUsd: 0, priceEur: 0 },
-  { slug: "rose-garden", name: "Rose Garden", category: EventCategory.engagement, isPremium: true, price: 399, priceUsd: 399, priceEur: 349 },
-  { slug: "confetti-burst", name: "Confetti Burst", category: EventCategory.birthday, isPremium: false, price: 0, priceUsd: 0, priceEur: 0 },
-  { slug: "neon-glow", name: "Neon Glow", category: EventCategory.birthday, isPremium: true, price: 299, priceUsd: 299, priceEur: 249 },
-  { slug: "little-star", name: "Little Star", category: EventCategory.baby_shower, isPremium: false, price: 0, priceUsd: 0, priceEur: 0 },
-  { slug: "sweet-arrival", name: "Sweet Arrival", category: EventCategory.baby_shower, isPremium: true, price: 349, priceUsd: 349, priceEur: 299 },
-  { slug: "executive-edge", name: "Executive Edge", category: EventCategory.corporate, isPremium: true, price: 799, priceUsd: 799, priceEur: 749 },
-  { slug: "modern-summit", name: "Modern Summit", category: EventCategory.corporate, isPremium: true, price: 599, priceUsd: 599, priceEur: 549 },
-  { slug: "timeless-love", name: "Timeless Love", category: EventCategory.anniversary, isPremium: true, price: 449, priceUsd: 449, priceEur: 399 },
+  { slug: "royal-gold", name: "Royal Gold", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "floral-garden", name: "Floral Garden", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "eternal-vows", name: "Eternal Vows", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "rustic-charm", name: "Rustic Charm", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "celestial-dreams", name: "Celestial Dreams", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "velvet-3d", name: "Velvet 3D", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "midnight-bloom", name: "Midnight Bloom", category: EventCategory.engagement, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "golden-ring", name: "Golden Ring", category: EventCategory.engagement, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "rose-garden", name: "Rose Garden", category: EventCategory.engagement, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "confetti-burst", name: "Confetti Burst", category: EventCategory.birthday, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "neon-glow", name: "Neon Glow", category: EventCategory.birthday, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "little-star", name: "Little Star", category: EventCategory.baby_shower, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "sweet-arrival", name: "Sweet Arrival", category: EventCategory.baby_shower, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "executive-edge", name: "Executive Edge", category: EventCategory.corporate, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "modern-summit", name: "Modern Summit", category: EventCategory.corporate, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "timeless-love", name: "Timeless Love", category: EventCategory.anniversary, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
 ];
 
 const categories = [
@@ -45,6 +46,7 @@ const promoCodes = [
   { code: "FLAT50", discountType: DiscountType.flat, discountValue: 200, isActive: true },
   { code: "NEWUSER", discountType: DiscountType.percentage, discountValue: 15, isActive: true },
   { code: "SAVE100", discountType: DiscountType.flat, discountValue: 500, isActive: true },
+  { code: "RAZORPAY10", discountType: DiscountType.percentage, discountValue: 10, isActive: true },
 ];
 
 async function main() {
@@ -77,6 +79,20 @@ async function main() {
       passwordHash: supportPassword,
       role: AdminRole.support,
     },
+  });
+
+  const testPassword = await bcrypt.hash(process.env.TEST_USER_PASSWORD || "ShyaraTest@2024", 12);
+  await prisma.user.upsert({
+    where: { email: "test@invitesbyshyara.com" },
+    create: {
+      name: "Razorpay Test User",
+      email: "test@invitesbyshyara.com",
+      passwordHash: testPassword,
+      status: "active",
+      emailVerified: true,
+      plan: "free",
+    },
+    update: { passwordHash: testPassword },
   });
 
   for (const category of categories) {

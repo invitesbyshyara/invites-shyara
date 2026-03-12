@@ -8,7 +8,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
-  googleLogin: () => Promise<void>;
+  googleLogin: (accessToken: string) => Promise<void>;
   logout: () => Promise<void>;
   pendingTemplateSlug: string | null;
   setPendingTemplateSlug: (slug: string | null) => void;
@@ -73,10 +73,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const googleLogin = useCallback(async () => {
+  const googleLogin = useCallback(async (accessToken: string) => {
     setIsLoading(true);
     try {
-      const result = await api.googleAuth();
+      const result = await api.googleAuth(accessToken);
       setUser(result.user);
     } finally {
       setIsLoading(false);

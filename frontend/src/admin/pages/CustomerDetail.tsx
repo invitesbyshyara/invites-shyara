@@ -69,7 +69,7 @@ const CustomerDetail: React.FC = () => {
   };
 
   const fmt = (cents: number, currency?: string) => {
-    const symbol = currency === 'INR' ? '₹' : currencySymbol;
+    const symbol = currencySymbol;
     return `${symbol}${(cents / 100).toFixed(2)}`;
   };
 

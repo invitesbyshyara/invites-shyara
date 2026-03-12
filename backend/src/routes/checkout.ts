@@ -11,6 +11,8 @@ import {
   verifyRazorpayPayment,
   verifyRazorpayWebhook,
 } from "../services/payment";
+import { sendOrderConfirmationEmail, sendPaymentFailedEmail } from "../services/email";
+import { logger } from "../lib/logger";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 
 const router = Router();
@@ -185,6 +187,15 @@ router.post(
         return { inviteId: invite.id, transactionId: transaction.id };
       });
 
+      sendOrderConfirmationEmail(user.email, {
+        name: user.name,
+        templateName: template.name,
+        amount: 0,
+        currency: currency.toUpperCase(),
+        transactionId: result.transactionId,
+        dashboardUrl: `${env.FRONTEND_URL}/dashboard`,
+      }).catch((err) => logger.error("Order confirmation email failed (free)", { err }));
+
       return sendSuccess(res, {
         free: true,
         inviteId: result.inviteId,
@@ -257,6 +268,11 @@ const completeTransactionByOrderId = async (
     return {
       inviteId: await findExistingInvite(tx, transaction.userId, transaction.templateSlug),
       transactionId: transaction.id,
+      wasNewlyCompleted: false as const,
+      templateSlug: transaction.templateSlug,
+      userId: transaction.userId,
+      amount: transaction.amount,
+      currency: transaction.currency,
     };
   }
 
@@ -278,6 +294,11 @@ const completeTransactionByOrderId = async (
       return {
         inviteId: await findExistingInvite(tx, latest.userId, latest.templateSlug),
         transactionId: latest.id,
+        wasNewlyCompleted: false as const,
+        templateSlug: latest.templateSlug,
+        userId: latest.userId,
+        amount: latest.amount,
+        currency: latest.currency,
       };
     }
     throw new AppError("Transaction already processed", 409);
@@ -315,7 +336,15 @@ const completeTransactionByOrderId = async (
     },
   });
 
-  return { inviteId: invite.id, transactionId: transaction.id };
+  return {
+    inviteId: invite.id,
+    transactionId: transaction.id,
+    wasNewlyCompleted: true as const,
+    templateSlug: transaction.templateSlug,
+    userId: transaction.userId,
+    amount: transaction.amount,
+    currency: transaction.currency,
+  };
 };
 
 const verifyPaymentSchema = z.object({
@@ -339,6 +368,18 @@ router.post(
     const result = await prisma.$transaction((tx) =>
       completeTransactionByOrderId(tx, razorpayOrderId, razorpayPaymentId, req.user!.id),
     );
+
+    if (result.wasNewlyCompleted) {
+      const tmpl = await prisma.template.findUnique({ where: { slug: result.templateSlug } });
+      sendOrderConfirmationEmail(req.user!.email, {
+        name: req.user!.name,
+        templateName: tmpl?.name ?? result.templateSlug,
+        amount: result.amount,
+        currency: result.currency,
+        transactionId: result.transactionId,
+        dashboardUrl: `${env.FRONTEND_URL}/dashboard`,
+      }).catch((err) => logger.error("Order confirmation email failed (verify-payment)", { err }));
+    }
 
     return sendSuccess(res, {
       transactionId: result.transactionId,
@@ -375,9 +416,25 @@ router.post(
       const razorpayPaymentId: string = paymentEntity.id;
 
       try {
-        await prisma.$transaction((tx) =>
+        const result = await prisma.$transaction((tx) =>
           completeTransactionByOrderId(tx, razorpayOrderId, razorpayPaymentId),
         );
+        if (result.wasNewlyCompleted) {
+          const [user, tmpl] = await Promise.all([
+            prisma.user.findUnique({ where: { id: result.userId }, select: { email: true, name: true } }),
+            prisma.template.findUnique({ where: { slug: result.templateSlug } }),
+          ]);
+          if (user) {
+            sendOrderConfirmationEmail(user.email, {
+              name: user.name,
+              templateName: tmpl?.name ?? result.templateSlug,
+              amount: result.amount,
+              currency: result.currency,
+              transactionId: result.transactionId,
+              dashboardUrl: `${env.FRONTEND_URL}/dashboard`,
+            }).catch((err) => logger.error("Order confirmation email failed (webhook)", { err }));
+          }
+        }
       } catch (error) {
         if (!(error instanceof AppError) || error.statusCode !== 404) {
           throw error;
@@ -395,6 +452,19 @@ router.post(
         where: { razorpayOrderId, status: "pending" },
         data: { status: "failed", refundReason: errorDescription },
       });
+
+      prisma.transaction.findFirst({
+        where: { razorpayOrderId },
+        include: { user: { select: { email: true, name: true } } },
+      }).then(async (tx) => {
+        if (!tx) return;
+        const tmpl = await prisma.template.findUnique({ where: { slug: tx.templateSlug } });
+        return sendPaymentFailedEmail(tx.user.email, {
+          name: tx.user.name,
+          templateName: tmpl?.name ?? tx.templateSlug,
+          retryUrl: `${env.FRONTEND_URL}/templates`,
+        });
+      }).catch((err) => logger.error("Payment failed email error", { err }));
     }
 
     return res.status(200).json({ received: true });

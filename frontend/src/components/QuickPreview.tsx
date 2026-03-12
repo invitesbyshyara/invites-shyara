@@ -33,13 +33,13 @@ const QuickPreview = ({ template, open, onOpenChange }: Props) => {
           <div className="mt-6 text-center w-full">
             <h3 className="font-display text-xl font-bold">{template.name}</h3>
             <p className="text-sm text-muted-foreground font-body capitalize mt-1">
-              {template.category.replace("-", " ")} · {template.isPremium ? formatPrice(price) : "Free"}
+              {template.category.replace("-", " ")} · {formatPrice(price)}
             </p>
             <div className="flex gap-3 mt-5 justify-center">
               <Button variant="outline" className="font-body" asChild>
-                <a href={`/templates/${template.slug}/preview`} target="_blank" rel="noopener noreferrer">
+                <Link to={`/templates/${template.slug}/preview`}>
                   Full Preview
-                </a>
+                </Link>
               </Button>
               <Button asChild className="font-body">
                 <Link to={`/checkout/${template.slug}`}>Use This Template</Link>

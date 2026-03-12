@@ -141,13 +141,7 @@ const Home = () => {
               <Button asChild size="lg" className="text-base px-8">
                 <Link to="/templates">Browse Templates</Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="text-base px-8">
-                <Link to="/i/demo-invite">See a Live Example</Link>
-              </Button>
             </motion.div>
-            <motion.p variants={fadeUp} transition={{ duration: 0.5 }} className="text-xs text-muted-foreground font-body mt-4">
-              Starting Free · No credit card needed
-            </motion.p>
           </motion.div>
 
           {/* Right: Dual phone mockups */}
@@ -337,7 +331,7 @@ const Home = () => {
                 ))}
               </div>
               <Button asChild size="lg" className="font-body">
-                <Link to="/i/demo-invite">Try the Live Demo <ChevronRight className="w-4 h-4 ml-1" /></Link>
+                <Link to="/templates">Browse Templates <ChevronRight className="w-4 h-4 ml-1" /></Link>
               </Button>
             </motion.div>
           </div>
@@ -400,7 +394,7 @@ const Home = () => {
               { icon: <BarChart3 className="w-6 h-6" />, title: 'RSVP Dashboard', desc: 'Track who\'s coming with a real-time guest response dashboard' },
               { icon: <Link2 className="w-6 h-6" />, title: 'Instant Sharing', desc: 'One beautiful link — share via WhatsApp, Instagram, email, or text' },
               { icon: <Palette className="w-6 h-6" />, title: 'Personalized', desc: 'Your names, dates, photos, and story — woven into every pixel' },
-              { icon: <Gift className="w-6 h-6" />, title: 'Free & Premium', desc: 'Start with free templates or unlock premium designs for your special day' },
+              { icon: <Gift className="w-6 h-6" />, title: 'Pay Per Template', desc: 'One-time payment per template — no subscriptions, no hidden fees.' },
             ].map(item => (
               <motion.div key={item.title} variants={fadeUp} transition={{ duration: 0.4 }} className="text-center p-6 rounded-xl hover:bg-card transition-colors group">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
@@ -487,14 +481,14 @@ const Home = () => {
         <div className="container max-w-2xl text-center">
           <div className="p-8 rounded-2xl border border-border bg-card shadow-romantic">
             <Gift className="w-8 h-8 text-gold mx-auto mb-4" />
-            <h3 className="font-serif text-2xl font-bold mb-3">Free templates forever.</h3>
+            <h3 className="font-serif text-2xl font-bold mb-3">Beautiful invitations, one-time price.</h3>
             {/* Price anchoring */}
             <div className="flex items-center justify-center gap-3 mb-4 font-body text-sm">
-              <span className="line-through text-muted-foreground">Traditional print {currency === 'USD' ? '$500+' : '�450+'}</span>
+              <span className="line-through text-muted-foreground">Traditional print {currency === 'USD' ? '$500+' : '€500+'}</span>
               <span className="text-foreground">→</span>
-              <span className="text-gold font-semibold">Shyara from Free</span>
+              <span className="text-gold font-semibold">Shyara {currency === 'USD' ? '$99' : '€119'}</span>
             </div>
-            <p className="text-muted-foreground font-body mb-5">Premium designs from just <span className="text-gold font-semibold">{currency === 'USD' ? 'from $2.99' : 'from �2.49'}</span>.</p>
+            <p className="text-muted-foreground font-body mb-5">One-time payment per template — <span className="text-gold font-semibold">no subscriptions, no hidden fees.</span></p>
             {/* Mini template row */}
             <div className="flex justify-center gap-2 mb-6">
               {allTemplates.slice(0, 3).map(t => (
@@ -524,10 +518,7 @@ const Home = () => {
           <p className="text-muted-foreground font-body mb-8">Join thousands of hosts who've made their celebrations unforgettable with Shyara.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild size="lg" className="text-base px-8 font-body">
-              <Link to="/templates">Get Started Free</Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="text-base px-8 font-body">
-              <Link to="/i/demo-invite">See Live Demo</Link>
+              <Link to="/templates">Browse Templates</Link>
             </Button>
           </div>
         </div>
@@ -566,7 +557,6 @@ const Home = () => {
               <div className="space-y-2 text-sm font-body text-muted-foreground">
                 <Link to="/templates" className="block hover:text-foreground transition-colors">Templates</Link>
                 <Link to="/pricing" className="block hover:text-foreground transition-colors">Pricing</Link>
-                <Link to="/i/demo-invite" className="block hover:text-foreground transition-colors">Live Demo</Link>
               </div>
             </div>
             <div>
@@ -636,10 +626,8 @@ const TemplateCard = ({
     <div className="aspect-[3/4] relative overflow-hidden">
       <TemplateThumbnail config={t} />
       <div className="absolute top-2 left-2 flex gap-1.5 z-10">
-        <span className={`px-2 py-0.5 rounded-full text-[9px] font-body font-medium backdrop-blur-sm ${
-          t.isPremium ? 'bg-gold/90 text-gold-foreground' : 'bg-card/90 border border-border'
-        }`}>
-          {t.isPremium ? formatPrice(currency === 'USD' ? t.priceUsd : t.priceEur) : 'Free'}
+        <span className="px-2 py-0.5 rounded-full text-[9px] font-body font-medium backdrop-blur-sm bg-gold/90 text-gold-foreground">
+          {formatPrice(currency === 'USD' ? t.priceUsd : t.priceEur)}
         </span>
       </div>
       <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/40 dark:group-hover:bg-black/50 transition-colors duration-300 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 z-10">

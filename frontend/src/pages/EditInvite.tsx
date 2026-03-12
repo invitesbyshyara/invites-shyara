@@ -23,10 +23,18 @@ const EditInvite = () => {
     }).finally(() => setLoading(false));
   }, [inviteId, isAuthenticated, navigate]);
 
-  if (loading || !invite || !config) {
+  if (loading || !invite) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!config) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-muted-foreground font-body">Template not available. Please contact support.</p>
       </div>
     );
   }

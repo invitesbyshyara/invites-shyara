@@ -59,7 +59,7 @@ const Account = () => {
     }
   };
 
-  const handlePasswordChange = () => {
+  const handlePasswordChange = async () => {
     const errs: Record<string, string> = {};
     if (!currentPassword) errs.currentPassword = 'Current password is required';
     if (newPassword.length < 8) errs.newPassword = 'Must be at least 8 characters';
@@ -67,12 +67,18 @@ const Account = () => {
     setPasswordErrors(errs);
     setPasswordTouched({ currentPassword: true, newPassword: true, confirmPassword: true });
     if (Object.keys(errs).length > 0) return;
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setPasswordErrors({});
-    setPasswordTouched({});
-    toast({ title: 'Password updated successfully' });
+    try {
+      await api.updatePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordErrors({});
+      setPasswordTouched({});
+      toast({ title: 'Password updated successfully' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update password';
+      setPasswordErrors({ currentPassword: msg });
+    }
   };
 
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,7 +139,8 @@ const Account = () => {
           </div>
           <div>
             <Label className="font-body text-sm">Email</Label>
-            <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1.5" />
+            <Input type="email" value={email} disabled className="mt-1.5 opacity-60 cursor-not-allowed" />
+            <p className="text-xs text-muted-foreground font-body mt-1">Email cannot be changed.</p>
           </div>
           <div>
             <Label className="font-body text-sm">Phone</Label>

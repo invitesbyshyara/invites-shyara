@@ -15,6 +15,7 @@ const statusStyles: Record<string, string> = {
   published: 'bg-accent text-accent-foreground',
   draft: 'bg-secondary text-secondary-foreground',
   expired: 'bg-muted text-muted-foreground',
+  'taken-down': 'bg-destructive/10 text-destructive',
 };
 
 const Dashboard = () => {

@@ -42,11 +42,18 @@ export const errorHandler = (
     return sendError(res, "Invalid database input", 400);
   }
 
+  // Razorpay SDK throws plain objects: { statusCode, error: { code, description } }
+  if (err && typeof err === "object" && "statusCode" in err && "error" in err) {
+    const rzErr = err as { statusCode: number; error: { description?: string } };
+    const description = rzErr.error?.description ?? "Payment provider error";
+    return sendError(res, description, 502);
+  }
+
   const message = err instanceof Error ? err.message : "Internal server error";
-  return sendError(
-    res,
-    message,
-    500,
-    env.NODE_ENV === "production" ? undefined : (err instanceof Error ? err.stack : String(err)),
-  );
+  const devDetails = (() => {
+    if (env.NODE_ENV === "production") return undefined;
+    if (err instanceof Error) return err.stack;
+    try { return JSON.stringify(err); } catch { return String(err); }
+  })();
+  return sendError(res, message, 500, devDetails);
 };

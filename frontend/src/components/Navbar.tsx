@@ -10,7 +10,6 @@ import { motion } from 'framer-motion';
 const navLinks = [
   { to: '/templates', label: 'Templates' },
   { to: '/pricing', label: 'Pricing' },
-  { to: '/i/demo-invite', label: 'Live Demo' },
 ];
 
 const Navbar = () => {

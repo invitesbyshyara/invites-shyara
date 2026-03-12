@@ -312,13 +312,13 @@ try {
     Write-Ok "Prisma client generated"
 
     if (-not $SkipMigrate) {
-        Write-Step "Running Prisma migrate dev"
-        npx prisma migrate dev --skip-seed
+        Write-Step "Running Prisma migrate reset (local dev DB)"
+        npx prisma migrate reset --force
         if ($LASTEXITCODE -ne 0) {
-            Write-Err "prisma migrate dev failed"
+            Write-Err "prisma migrate reset failed"
             exit 1
         }
-        Write-Ok "Prisma migrations applied"
+        Write-Ok "Prisma migrations applied and database seeded"
     } else {
         Write-Step "Skipping Prisma migrate (-SkipMigrate)"
     }

@@ -1,6 +1,5 @@
 ﻿import { Router } from "express";
 import bcrypt from "bcrypt";
-import { OAuth2Client } from "google-auth-library";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { env } from "../lib/env";
@@ -11,7 +10,6 @@ import { sendPasswordResetOtpEmail, sendWelcomeEmail } from "../services/email";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 
 const router = Router();
-const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
 const REFRESH_COOKIE = "refreshToken";
 const REFRESH_COOKIE_AGE = 7 * 24 * 60 * 60 * 1000;
@@ -167,22 +165,31 @@ router.post(
 );
 
 const googleSchema = z.object({
-  idToken: z.string().min(1),
+  accessToken: z.string().min(1),
 });
 
 router.post(
   "/google",
   validate({ body: googleSchema }),
   asyncHandler(async (req, res) => {
-    const { idToken } = req.body;
+    const { accessToken: googleAccessToken } = req.body;
 
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: env.GOOGLE_CLIENT_ID,
+    const userinfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${googleAccessToken}` },
     });
 
-    const payload = ticket.getPayload();
-    if (!payload?.sub || !payload.email) {
+    if (!userinfoRes.ok) {
+      throw new AppError("Invalid Google token", 400);
+    }
+
+    const payload = (await userinfoRes.json()) as {
+      sub: string;
+      email: string;
+      name?: string;
+      picture?: string;
+    };
+
+    if (!payload.sub || !payload.email) {
       throw new AppError("Invalid Google token", 400);
     }
 

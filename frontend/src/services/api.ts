@@ -480,8 +480,19 @@ export const api = {
     return { user, token: result.accessToken };
   },
 
-  googleAuth: async () => {
-    throw new Error("Google login requires frontend Google token integration");
+  googleAuth: async (accessToken: string) => {
+    const result = await request<{ user: User; accessToken: string }>(
+      "/auth/google",
+      {
+        method: "POST",
+        body: JSON.stringify({ accessToken }),
+      },
+      false,
+    );
+    const user = mapUser(result.user as unknown as Parameters<typeof mapUser>[0]);
+    setStoredToken(result.accessToken);
+    setCachedUser(user);
+    return { user, token: result.accessToken };
   },
 
   getMe: async () => {
