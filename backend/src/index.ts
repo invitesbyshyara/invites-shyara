@@ -31,6 +31,7 @@ import adminAdminsRoutes from "./routes/admin/admins";
 import adminAuditLogsRoutes from "./routes/admin/audit-logs";
 import { errorHandler } from "./middleware/errorHandler";
 import { startRsvpReminderJob } from "./jobs/rsvpReminders";
+import { bootstrapAdminUsersFromEnv } from "./services/adminBootstrap";
 
 const app = express();
 const allowedOrigins = [env.FRONTEND_URL, env.ADMIN_PORTAL_URL ?? env.FRONTEND_URL];
@@ -165,47 +166,53 @@ app.use((_req, res) => {
 
 app.use(errorHandler);
 
-const server = app.listen(env.PORT, () => {
-  logger.info(`Backend running on port ${env.PORT}`);
-  startRsvpReminderJob();
-});
-
 let isShuttingDown = false;
 
-const shutdown = async (signal: string) => {
-  if (isShuttingDown) {
-    return;
-  }
+const start = async () => {
+  await bootstrapAdminUsersFromEnv();
 
-  isShuttingDown = true;
-  logger.info(`Received ${signal}, shutting down gracefully...`);
-  server.close(async () => {
-    logger.info("HTTP server closed");
-    await prisma.$disconnect();
-    logger.info("Database connection closed");
-    process.exit(0);
+  const server = app.listen(env.PORT, () => {
+    logger.info(`Backend running on port ${env.PORT}`);
+    startRsvpReminderJob();
   });
 
-  setTimeout(() => {
-    logger.error("Forced shutdown after timeout");
-    process.exit(1);
-  }, 30_000);
+  const shutdown = async (signal: string) => {
+    if (isShuttingDown) {
+      return;
+    }
+
+    isShuttingDown = true;
+    logger.info(`Received ${signal}, shutting down gracefully...`);
+    server.close(async () => {
+      logger.info("HTTP server closed");
+      await prisma.$disconnect();
+      logger.info("Database connection closed");
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      logger.error("Forced shutdown after timeout");
+      process.exit(1);
+    }, 30_000);
+  };
+
+  process.on("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
+
+  process.on("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
+
+  process.on("uncaughtException", (err) => {
+    logger.error("Uncaught exception", { err });
+    void shutdown("uncaughtException");
+  });
+
+  process.on("unhandledRejection", (reason) => {
+    logger.error("Unhandled rejection", { reason });
+    void shutdown("unhandledRejection");
+  });
 };
 
-process.on("SIGTERM", () => {
-  void shutdown("SIGTERM");
-});
-
-process.on("SIGINT", () => {
-  void shutdown("SIGINT");
-});
-
-process.on("uncaughtException", (err) => {
-  logger.error("Uncaught exception", { err });
-  void shutdown("uncaughtException");
-});
-
-process.on("unhandledRejection", (reason) => {
-  logger.error("Unhandled rejection", { reason });
-  void shutdown("unhandledRejection");
-});
+void start();
