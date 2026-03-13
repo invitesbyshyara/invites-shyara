@@ -27,6 +27,14 @@ services:
         generateValue: true
       - key: GOOGLE_CLIENT_ID
         sync: false
+      - key: SEED_ADMIN_USERS
+        value: "true"
+      - key: ADMIN_SEED_PASSWORD
+        sync: false
+      - key: SUPPORT_SEED_PASSWORD
+        sync: false
+      - key: SEED_TEST_USER
+        value: "false"
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET

@@ -18,8 +18,12 @@ const AdminLogin: React.FC = () => {
     try {
       await login(email, password);
       navigate('/admin');
-    } catch {
-      toast({ title: 'Invalid credentials', description: 'Check your email and password.', variant: 'destructive' });
+    } catch (err) {
+      toast({
+        title: 'Admin sign-in failed',
+        description: err instanceof Error ? err.message : 'Check your backend connection and credentials.',
+        variant: 'destructive',
+      });
     }
   };
 
