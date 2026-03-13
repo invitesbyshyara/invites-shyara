@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Heart, LayoutDashboard, LogOut, MessageSquareQuote, PlayCircle, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 import { motion } from "framer-motion";
 import MobileNav from "@/components/MobileNav";
@@ -34,8 +34,14 @@ const isLinkActive = (pathname: string, currentPath: string, linkTo: string) => 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { currency, setCurrency } = useCurrency();
   const { isAuthenticated, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/", { replace: true });
+  };
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20);
@@ -127,7 +133,7 @@ const Navbar = () => {
                 </Link>
               </Button>
               <button
-                onClick={() => void logout()}
+                onClick={() => void handleLogout()}
                 className="inline-flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 <LogOut className="w-4 h-4" />
@@ -175,7 +181,7 @@ const Navbar = () => {
               ...(isAuthenticated ? [{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
             ]}
             isAuthenticated={isAuthenticated}
-            onLogout={() => void logout()}
+            onLogout={() => void handleLogout()}
           />
         </div>
       </div>

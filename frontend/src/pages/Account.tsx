@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,8 +43,7 @@ const Account = () => {
   }, []);
 
   if (!isAuthenticated) {
-    navigate('/login');
-    return null;
+    return <Navigate to="/login" replace />;
   }
 
   const handleSave = async () => {
@@ -115,6 +114,11 @@ const Account = () => {
       });
   };
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/', { replace: true });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50">
@@ -122,7 +126,7 @@ const Account = () => {
           <Link to="/" className="font-display text-xl font-bold">Shyara</Link>
           <div className="flex items-center gap-4 text-sm font-body">
             <Link to="/dashboard" className="text-muted-foreground hover:text-foreground">Dashboard</Link>
-            <button onClick={logout} className="text-muted-foreground hover:text-foreground">Logout</button>
+            <button onClick={() => void handleLogout()} className="text-muted-foreground hover:text-foreground">Logout</button>
           </div>
         </div>
       </nav>

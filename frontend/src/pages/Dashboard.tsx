@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { MoreHorizontal, Search, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,6 +98,15 @@ const Dashboard = () => {
     }
   };
 
+  const handleLogout = async () => {
+    await logout();
+    navigate("/", { replace: true });
+  };
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50">
@@ -107,7 +116,7 @@ const Dashboard = () => {
             <Link to="/dashboard" className="font-medium text-foreground">Dashboard</Link>
             <Link to="/templates" className="text-muted-foreground hover:text-foreground hidden md:inline">Browse</Link>
             <Link to="/account" className="text-muted-foreground hover:text-foreground hidden md:inline">Account</Link>
-            <button onClick={logout} className="text-muted-foreground hover:text-foreground">Logout</button>
+            <button onClick={() => void handleLogout()} className="text-muted-foreground hover:text-foreground">Logout</button>
           </div>
         </div>
       </nav>
