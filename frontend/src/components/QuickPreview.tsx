@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import PurchaseCtaButton from "@/components/PurchaseCtaButton";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { TemplateConfig } from "@/types";
 import PhoneMockup from "@/components/PhoneMockup";
@@ -45,9 +46,7 @@ const QuickPreview = ({ template, open, onOpenChange }: QuickPreviewProps) => {
               <Button variant="outline" className="font-body" asChild>
                 <Link to={`/samples/${template.slug}`}>Live Sample</Link>
               </Button>
-              <Button asChild className="font-body">
-                <Link to={`/checkout/${template.slug}`}>Buy & Customize</Link>
-              </Button>
+              <PurchaseCtaButton slug={template.slug} openLabel="Buy & Customize" className="font-body" />
             </div>
           </div>
         </div>

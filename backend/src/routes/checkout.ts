@@ -11,6 +11,12 @@ import {
   verifyRazorpayPayment,
   verifyRazorpayWebhook,
 } from "../services/payment";
+import {
+  CUSTOMER_ACQUISITION_PAYMENT_LOCK_MESSAGE,
+  CUSTOMER_ACQUISITION_REFUND_MESSAGE,
+  isCustomerAcquisitionLocked,
+  refundPendingCapturedPaymentForLock,
+} from "../services/customerAcquisitionLock";
 import { sendOrderConfirmationEmail, sendPaymentFailedEmail } from "../services/email";
 import { logger } from "../lib/logger";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
@@ -115,6 +121,10 @@ router.post(
   verifyToken,
   validate({ body: createOrderSchema }),
   asyncHandler(async (req, res) => {
+    if (isCustomerAcquisitionLocked()) {
+      throw new AppError(CUSTOMER_ACQUISITION_PAYMENT_LOCK_MESSAGE, 503);
+    }
+
     const user = req.user!;
     const { templateSlug, currency, promoCode } = req.body;
 
@@ -365,6 +375,29 @@ router.post(
       throw new AppError("Invalid payment signature", 400);
     }
 
+    const transaction = await prisma.transaction.findFirst({
+      where: { razorpayOrderId },
+      select: { userId: true, status: true },
+    });
+
+    if (!transaction) {
+      throw new AppError("Transaction not found", 404);
+    }
+
+    if (transaction.userId !== req.user!.id) {
+      throw new AppError("Unauthorized transaction access", 403);
+    }
+
+    if (isCustomerAcquisitionLocked() && transaction.status !== "success") {
+      try {
+        await refundPendingCapturedPaymentForLock(razorpayOrderId, razorpayPaymentId);
+      } catch {
+        throw new AppError(CUSTOMER_ACQUISITION_REFUND_MESSAGE, 503);
+      }
+
+      throw new AppError(CUSTOMER_ACQUISITION_REFUND_MESSAGE, 503);
+    }
+
     const result = await prisma.$transaction((tx) =>
       completeTransactionByOrderId(tx, razorpayOrderId, razorpayPaymentId, req.user!.id),
     );
@@ -414,6 +447,21 @@ router.post(
     if (eventType === "payment.captured" && paymentEntity) {
       const razorpayOrderId: string = paymentEntity.order_id;
       const razorpayPaymentId: string = paymentEntity.id;
+
+      if (isCustomerAcquisitionLocked()) {
+        try {
+          await refundPendingCapturedPaymentForLock(razorpayOrderId, razorpayPaymentId);
+        } catch (error) {
+          logger.error("Customer acquisition lock webhook refund failed", {
+            error,
+            razorpayOrderId,
+            razorpayPaymentId,
+          });
+          throw error;
+        }
+
+        return res.status(200).json({ received: true });
+      }
 
       try {
         const result = await prisma.$transaction((tx) =>

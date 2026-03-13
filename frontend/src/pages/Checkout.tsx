@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePlatformStatus } from "@/contexts/PlatformStatusContext";
 import { api } from "@/services/api";
 import { TemplateConfig } from "@/types";
 import { getTemplateRenderer } from "@/templates/registry";
@@ -31,6 +32,7 @@ const Checkout = () => {
   const { slug = "" } = useParams<{ slug: string }>();
   const { currency, symbol, formatPrice } = useCurrency();
   const { user, isAuthenticated, setPendingTemplateSlug } = useAuth();
+  const { status, isLoading: platformLoading } = usePlatformStatus();
   const [template, setTemplate] = useState<TemplateConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
@@ -79,9 +81,15 @@ const Checkout = () => {
       ? Math.floor((basePrice * appliedPromo.value) / 100)
       : Math.min(appliedPromo.value, basePrice);
   const finalPrice = Math.max(0, basePrice - discount);
+  const acquisitionLocked = platformLoading || status.customerAcquisitionLocked;
+  const lockNotice = status.notice ?? "Purchases are temporarily unavailable while we complete platform verification.";
 
   const handleApplyPromo = async () => {
     if (!slug || !promoInput.trim()) return;
+    if (acquisitionLocked) {
+      setPromoError(lockNotice);
+      return;
+    }
     if (!isAuthenticated) {
       setPromoError("Sign in first to apply a promo code.");
       return;
@@ -108,6 +116,10 @@ const Checkout = () => {
 
   const handlePay = async () => {
     if (!template || !isAuthenticated) return;
+    if (acquisitionLocked) {
+      setPayError(lockNotice);
+      return;
+    }
 
     setPaying(true);
     setPayError(null);
@@ -192,6 +204,15 @@ const Checkout = () => {
             </p>
           </div>
 
+          {acquisitionLocked && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+              <p className="font-display font-semibold text-amber-950">Purchases are temporarily paused</p>
+              <p className="mt-2 text-sm text-amber-900 font-body">
+                {lockNotice} You can still preview the design and return once payment verification is complete.
+              </p>
+            </div>
+          )}
+
           <div className="flex items-center gap-6 p-6 rounded-2xl border border-border bg-card">
             <div className="w-24 h-32 rounded-lg overflow-hidden shrink-0 border border-border">
               <TemplateThumbnail config={template} />
@@ -274,7 +295,9 @@ const Checkout = () => {
                 <div>
                   <h3 className="font-display font-semibold mb-2">Sign in to continue</h3>
                   <p className="text-sm text-muted-foreground font-body mb-4">
-                    Preview is open to everyone. Purchase and personalization start after you sign in.
+                    {acquisitionLocked
+                      ? "Preview is open to everyone. New customer signups and purchases are temporarily paused while we complete platform verification."
+                      : "Preview is open to everyone. Purchase and personalization start after you sign in."}
                   </p>
                 </div>
               </div>
@@ -282,9 +305,11 @@ const Checkout = () => {
                 <Button asChild onClick={() => setPendingTemplateSlug(slug)}>
                   <Link to={`/login?next=/checkout/${slug}`}>Log In</Link>
                 </Button>
-                <Button asChild variant="outline" onClick={() => setPendingTemplateSlug(slug)}>
-                  <Link to={`/register?next=/checkout/${slug}`}>Create Account</Link>
-                </Button>
+                {!acquisitionLocked && (
+                  <Button asChild variant="outline" onClick={() => setPendingTemplateSlug(slug)}>
+                    <Link to={`/register?next=/checkout/${slug}`}>Create Account</Link>
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -293,15 +318,15 @@ const Checkout = () => {
             <h3 className="font-display font-semibold mb-4">Promo code</h3>
             {!appliedPromo ? (
               <>
-                <button onClick={() => setPromoExpanded((open) => !open)} className="flex items-center gap-1.5 text-sm font-body text-muted-foreground hover:text-foreground transition-colors">
+                <button onClick={() => setPromoExpanded((open) => !open)} disabled={acquisitionLocked} className="flex items-center gap-1.5 text-sm font-body text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60">
                   Have a promo code?
                   <ChevronDown className={`w-4 h-4 transition-transform ${promoExpanded ? "rotate-180" : ""}`} />
                 </button>
                 {promoExpanded && (
                   <div className="mt-3 space-y-2">
                     <div className="flex gap-2">
-                      <Input value={promoInput} onChange={(event) => setPromoInput(event.target.value.toUpperCase())} placeholder="Enter promo code" className="flex-1 uppercase" onKeyDown={(event) => event.key === "Enter" && handleApplyPromo()} />
-                      <Button variant="outline" size="sm" className="font-body px-4 h-10" onClick={handleApplyPromo} disabled={!promoInput.trim() || promoLoading}>
+                      <Input value={promoInput} onChange={(event) => setPromoInput(event.target.value.toUpperCase())} placeholder="Enter promo code" disabled={acquisitionLocked} className="flex-1 uppercase" onKeyDown={(event) => event.key === "Enter" && handleApplyPromo()} />
+                      <Button variant="outline" size="sm" className="font-body px-4 h-10" onClick={handleApplyPromo} disabled={acquisitionLocked || !promoInput.trim() || promoLoading}>
                         {promoLoading ? "..." : "Apply"}
                       </Button>
                     </div>
@@ -345,13 +370,15 @@ const Checkout = () => {
               <span>Total</span>
               <span className="text-gold">{formatPrice(finalPrice)}</span>
             </div>
-            <p className="text-xs text-muted-foreground font-body mt-4">Secure payment via Razorpay. Cards and UPI accepted.</p>
+            <p className="text-xs text-muted-foreground font-body mt-4">
+              {acquisitionLocked ? "Payments are currently paused while we complete platform verification." : "Secure payment via Razorpay. Cards and UPI accepted."}
+            </p>
           </div>
 
           {payError && <p className="text-sm text-destructive font-body text-center">{payError}</p>}
 
-          <Button className="w-full h-12 font-display text-base" onClick={handlePay} disabled={!isAuthenticated || paying}>
-            {paying ? "Processing..." : isAuthenticated ? `Pay ${formatPrice(finalPrice)}` : "Sign in to unlock purchase"}
+          <Button className="w-full h-12 font-display text-base" onClick={handlePay} disabled={!isAuthenticated || paying || acquisitionLocked}>
+            {acquisitionLocked ? "Purchases temporarily unavailable" : paying ? "Processing..." : isAuthenticated ? `Pay ${formatPrice(finalPrice)}` : "Sign in to unlock purchase"}
           </Button>
         </aside>
       </div>

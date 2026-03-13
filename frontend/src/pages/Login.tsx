@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePlatformStatus } from '@/contexts/PlatformStatusContext';
 import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
 
@@ -11,11 +12,13 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, isLoading, pendingTemplateSlug, setPendingTemplateSlug } = useAuth();
+  const { status, isLoading: platformLoading } = usePlatformStatus();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const next = searchParams.get('next');
   const continuingCheckout = next?.startsWith('/checkout/');
+  const signupsLocked = platformLoading || status.customerAcquisitionLocked;
 
   const handleRedirect = () => {
     if (pendingTemplateSlug) {
@@ -53,6 +56,12 @@ const Login = () => {
           </p>
         </div>
 
+        {signupsLocked && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 font-body">
+            New customer signups are temporarily paused while we complete platform verification. Existing customers can still sign in here.
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="email" className="font-body text-sm">Email</Label>
@@ -70,10 +79,16 @@ const Login = () => {
           </Button>
         </form>
 
-        <p className="text-center mt-6 text-sm font-body text-muted-foreground">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-primary hover:underline font-medium">Register</Link>
-        </p>
+        {signupsLocked ? (
+          <p className="text-center mt-6 text-sm font-body text-muted-foreground">
+            New accounts are temporarily unavailable.
+          </p>
+        ) : (
+          <p className="text-center mt-6 text-sm font-body text-muted-foreground">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-primary hover:underline font-medium">Register</Link>
+          </p>
+        )}
       </div>
       </div>
     </div>

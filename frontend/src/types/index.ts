@@ -78,6 +78,11 @@ export interface User {
   avatar?: string;
 }
 
+export interface PlatformStatus {
+  customerAcquisitionLocked: boolean;
+  notice?: string | null;
+}
+
 export interface InviteViewer {
   token: string;
   name: string;

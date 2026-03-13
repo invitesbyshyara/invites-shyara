@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import PhoneMockup from "@/components/PhoneMockup";
+import PurchaseCtaButton from "@/components/PurchaseCtaButton";
 import TemplateThumbnail from "@/components/TemplateThumbnail";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -202,7 +203,7 @@ const TemplateCard = ({
         <div className="mt-4 flex gap-2">
           <Button asChild size="sm" variant="outline" className="flex-1 text-xs"><Link to={`/templates/${template.slug}/preview`}>Preview</Link></Button>
           <Button asChild size="sm" variant="outline" className="flex-1 text-xs"><Link to={`/samples/${template.slug}`}>Live Sample</Link></Button>
-          <Button asChild size="sm" className="flex-1 text-xs"><Link to={`/checkout/${template.slug}`}>Buy</Link></Button>
+          <PurchaseCtaButton slug={template.slug} openLabel="Buy" size="sm" className="flex-1 text-xs" />
         </div>
       </div>
     </motion.div>

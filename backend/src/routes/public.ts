@@ -3,9 +3,17 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { normalizeLocalizationSettings, normalizeRsvpSettings, pickGuestLanguage } from "../services/inviteOps";
 import { sendRsvpConfirmationEmail, sendRsvpNotificationEmail } from "../services/email";
+import { getCustomerAcquisitionStatus } from "../services/customerAcquisitionLock";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 
 const router = Router();
+
+router.get(
+  "/platform-status",
+  asyncHandler(async (_req, res) => {
+    return sendSuccess(res, getCustomerAcquisitionStatus());
+  }),
+);
 
 router.get(
   "/invites/:slug",

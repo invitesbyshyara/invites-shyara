@@ -4,6 +4,7 @@ import { ChevronLeft, Monitor, Smartphone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import PhoneMockup from "@/components/PhoneMockup";
+import PurchaseCtaButton from "@/components/PurchaseCtaButton";
 import { api } from "@/services/api";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { TemplateConfig } from "@/types";
@@ -92,9 +93,7 @@ const TemplatePreview = () => {
             </button>
           </div>
 
-          <Button asChild size="sm" className="text-xs shrink-0">
-            <Link to={`/checkout/${slug}`}>Buy & Customize</Link>
-          </Button>
+          <PurchaseCtaButton slug={slug} openLabel="Buy & Customize" lockedLabel="Purchases paused" size="sm" className="text-xs shrink-0" />
         </div>
       </div>
 
@@ -167,9 +166,7 @@ const TemplatePreview = () => {
               <Button asChild variant="outline" className="justify-start">
                 <Link to="/pricing">View Pricing</Link>
               </Button>
-              <Button asChild className="justify-start">
-                <Link to={`/checkout/${template.slug}`}>Buy & Customize</Link>
-              </Button>
+              <PurchaseCtaButton slug={template.slug} openLabel="Buy & Customize" lockedLabel="Purchases paused" className="justify-start" />
             </div>
           </div>
         </aside>

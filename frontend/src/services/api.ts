@@ -13,6 +13,7 @@ import {
   Rsvp,
   RsvpSettings,
   TemplateConfig,
+  PlatformStatus,
   User,
 } from "@/types";
 import { allTemplates, getTemplateBySlug } from "@/templates/registry";
@@ -241,6 +242,8 @@ type CheckoutOrderResponse = {
 export const api = {
   getCachedUser,
   hasStoredSession: () => Boolean(getStoredToken()),
+
+  getPlatformStatus: async () => request<PlatformStatus>("/public/platform-status"),
 
   getTemplates: async (params?: { category?: EventCategory; sort?: string }) => {
     const query = new URLSearchParams();

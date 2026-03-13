@@ -4,6 +4,7 @@ import { ArrowLeft, CalendarDays, Eye, MapPin } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import AddToCalendar from "@/components/AddToCalendar";
 import DirectionsButton from "@/components/DirectionsButton";
+import PurchaseCtaButton from "@/components/PurchaseCtaButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/services/api";
@@ -122,9 +123,7 @@ const SampleInvite = () => {
                 Studio Preview
               </Link>
             </Button>
-            <Button asChild>
-              <Link to={`/checkout/${template.slug}`}>Customize This Invite</Link>
-            </Button>
+            <PurchaseCtaButton slug={template.slug} openLabel="Customize This Invite" />
           </div>
         </div>
       </div>

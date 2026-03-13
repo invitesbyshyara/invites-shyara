@@ -88,6 +88,7 @@ docker compose up --build
 - `PORT`: HTTP port for backend.
 - `FRONTEND_URL`: Main frontend origin allowed by CORS.
 - `ADMIN_PORTAL_URL`: Admin portal origin allowed by CORS.
+- `CUSTOMER_ACQUISITION_LOCK_ENABLED`: When `true`, new customer signup and all purchases are blocked until launch verification is complete.
 - `DATABASE_URL`: Postgres connection string for Prisma.
 - `JWT_SECRET`: User access token secret (min 32 chars).
 - `JWT_EXPIRES_IN`: Access token expiry (default `15m`).

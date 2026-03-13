@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Eye, Search, Sparkles } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import PurchaseCtaButton from "@/components/PurchaseCtaButton";
 import QuickPreview from "@/components/QuickPreview";
 import TemplateThumbnail from "@/components/TemplateThumbnail";
 import { Button } from "@/components/ui/button";
@@ -196,9 +197,7 @@ const Gallery = () => {
                       <Button asChild size="sm" variant="outline" className="flex-1 text-xs">
                         <Link to={`/samples/${template.slug}`}>Live Sample</Link>
                       </Button>
-                      <Button asChild size="sm" className="flex-1 text-xs">
-                        <Link to={`/checkout/${template.slug}`}>Buy & Customize</Link>
-                      </Button>
+                      <PurchaseCtaButton slug={template.slug} openLabel="Buy & Customize" size="sm" className="flex-1 text-xs" />
                     </div>
                   </div>
                 </div>

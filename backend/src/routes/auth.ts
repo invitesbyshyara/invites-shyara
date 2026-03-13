@@ -6,6 +6,7 @@ import { env } from "../lib/env";
 import { generateRefreshToken, hashRefreshToken, signAccessToken } from "../lib/jwt";
 import { verifyToken } from "../middleware/auth";
 import { validate } from "../middleware/validate";
+import { assertCustomerAcquisitionOpen, CUSTOMER_ACQUISITION_LOCK_MESSAGE } from "../services/customerAcquisitionLock";
 import { sendPasswordResetOtpEmail, sendWelcomeEmail } from "../services/email";
 import { activateCollaboratorInvitations } from "../services/inviteOps";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
@@ -73,6 +74,8 @@ router.post(
   "/register",
   validate({ body: registerSchema }),
   asyncHandler(async (req, res) => {
+    assertCustomerAcquisitionOpen(CUSTOMER_ACQUISITION_LOCK_MESSAGE);
+
     const { name, email, password } = req.body;
 
     const existing = await prisma.user.findUnique({
@@ -205,6 +208,8 @@ router.post(
     });
 
     if (!user) {
+      assertCustomerAcquisitionOpen(CUSTOMER_ACQUISITION_LOCK_MESSAGE);
+
       user = await prisma.user.create({
         data: {
           name: payload.name ?? email.split("@")[0],
