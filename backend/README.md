@@ -114,7 +114,8 @@ docker compose up --build
 - `npm run db:migrate`: Run development migrations.
 - `npm run db:migrate:prod`: Run production-safe migrations (`prisma migrate deploy`).
 - `npm run db:reset`: Reset database and rerun migrations.
-- `npm run db:seed`: Seed admin users, settings, categories, templates, promo codes.
+- `npm run db:seed`: Seed local/dev data including default admin users and the test user.
+- `npm run db:seed:prod`: Seed production-safe baseline data (categories, templates, settings, promo codes) and optionally seed a test user/admins when explicit env flags are set.
 - `npm run db:studio`: Open Prisma Studio.
 
 ## API Base URL Conventions
@@ -144,11 +145,25 @@ Use deploy mode in production environments:
 npx prisma migrate deploy
 ```
 
+For a brand-new production database, bootstrap baseline catalog data with:
+
+```bash
+npx prisma migrate deploy
+npm run db:seed:prod
+```
+
+Optional production-safe seed flags:
+
+- `SEED_TEST_USER=true` with `TEST_USER_PASSWORD` to create the test customer account.
+- `SEED_ADMIN_USERS=true` with `ADMIN_SEED_PASSWORD` and `SUPPORT_SEED_PASSWORD` to create admin accounts.
+
 The production Docker image starts with:
 
 ```bash
-npx prisma migrate deploy && node dist/index.js
+npx prisma migrate deploy && if [ "$RUN_PROD_SEED" = "true" ]; then npm run db:seed:prod; fi && node dist/index.js
 ```
+
+Set `RUN_PROD_SEED=true` on the first deployment if you want the container to run `npm run db:seed:prod` before starting.
 
 ## Add a New Admin User via API
 
