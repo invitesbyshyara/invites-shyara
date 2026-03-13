@@ -7,7 +7,7 @@
 - PostgreSQL 16
 - Prisma ORM
 - JWT auth (user + admin)
-- Stripe payments
+- Razorpay payments
 - Resend email delivery
 - Cloudinary media storage
 
@@ -96,9 +96,9 @@ docker compose up --build
 - `ADMIN_JWT_SECRET`: Admin token secret (min 32 chars).
 - `ADMIN_JWT_EXPIRES_IN`: Admin token expiry (default `8h`).
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID.
-- `STRIPE_SECRET_KEY`: Stripe secret API key.
-- `STRIPE_PUBLISHABLE_KEY`: Stripe publishable key.
-- `STRIPE_WEBHOOK_SECRET`: Stripe webhook signature secret.
+- `RAZORPAY_KEY_ID`: Razorpay key ID.
+- `RAZORPAY_KEY_SECRET`: Razorpay key secret.
+- `RAZORPAY_WEBHOOK_SECRET`: Razorpay webhook signature secret.
 - `CLOUDINARY_CLOUD_NAME`: Cloudinary cloud name.
 - `CLOUDINARY_API_KEY`: Cloudinary API key.
 - `CLOUDINARY_API_SECRET`: Cloudinary API secret.

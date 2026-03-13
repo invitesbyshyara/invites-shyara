@@ -1,12 +1,59 @@
 services:
   - type: web
+    name: shyara-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci && npx prisma generate && npm run build
+    preDeployCommand: npx prisma migrate deploy && npm run db:seed:prod
+    startCommand: node dist/index.js
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    domains:
+      - api.invitesbyshyara.com
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: ADMIN_PORTAL_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: ADMIN_JWT_SECRET
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+  - type: web
     name: shyara-invite
     runtime: static
     rootDir: frontend
-    buildCommand: bun run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: dist
+    autoDeployTrigger: commit
     envVars:
-      - key: VITE_STRIPE_PUBLISHABLE_KEY
+      - key: VITE_API_URL
+        value: https://api.invitesbyshyara.com
+      - key: VITE_GOOGLE_CLIENT_ID
         sync: false
     headers:
       - path: /*

@@ -43,7 +43,7 @@ const Terms = () => (
           <h2 className="font-display text-xl font-semibold mb-3">4. Payments and Refunds</h2>
           <ul className="list-disc pl-6 space-y-2 text-muted-foreground leading-relaxed">
             <li>All prices are in USD or EUR and include applicable taxes where required.</li>
-            <li>Template purchases are processed securely through Stripe.</li>
+            <li>Template purchases are processed securely through Razorpay.</li>
             <li>Each purchase grants a perpetual, non-transferable license for one invite.</li>
             <li>Refunds may be requested within 7 days if the invite has not been published.</li>
             <li>No refunds are issued for published invitations.</li>
