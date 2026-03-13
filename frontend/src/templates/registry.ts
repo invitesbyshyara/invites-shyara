@@ -2,40 +2,10 @@ import { lazy } from 'react';
 import { TemplateConfig, EventCategory } from '@/types';
 
 // Static config imports (small data files, safe to bundle)
-import royalGold from './wedding/royal-gold/config';
-import floralGarden from './wedding/floral-garden/config';
-import eternalVows from './wedding/eternal-vows/config';
 import rusticCharm from './wedding/rustic-charm/config';
-import celestialDreams from './wedding/celestial-dreams/config';
-import midnightBloom from './engagement/midnight-bloom/config';
-import goldenRing from './engagement/golden-ring/config';
-import roseGarden from './engagement/rose-garden/config';
-import confettiBurst from './birthday/confetti-burst/config';
-import neonGlow from './birthday/neon-glow/config';
-import littleStar from './baby-shower/little-star/config';
-import sweetArrival from './baby-shower/sweet-arrival/config';
-import executiveEdge from './corporate/executive-edge/config';
-import modernSummit from './corporate/modern-summit/config';
-import timelessLove from './anniversary/timeless-love/config';
-import velvetThreeD from './wedding/velvet-3d/config';
 
 export const allTemplates: TemplateConfig[] = [
-  royalGold,
-  floralGarden,
-  eternalVows,
   rusticCharm,
-  celestialDreams,
-  midnightBloom,
-  goldenRing,
-  roseGarden,
-  confettiBurst,
-  neonGlow,
-  littleStar,
-  sweetArrival,
-  executiveEdge,
-  modernSummit,
-  timelessLove,
-  velvetThreeD,
 ];
 
 export const getTemplateBySlug = (slug: string): TemplateConfig | undefined =>
@@ -46,11 +16,6 @@ export const getTemplatesByCategory = (category: EventCategory): TemplateConfig[
 
 export const categories: { value: EventCategory; label: string }[] = [
   { value: 'wedding', label: 'Wedding' },
-  { value: 'engagement', label: 'Engagement' },
-  { value: 'birthday', label: 'Birthday' },
-  { value: 'baby-shower', label: 'Baby Shower' },
-  { value: 'corporate', label: 'Corporate' },
-  { value: 'anniversary', label: 'Anniversary' },
 ];
 
 // Dynamic renderer loading — Vite analyzes this glob at build time.

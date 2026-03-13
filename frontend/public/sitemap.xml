@@ -18,79 +18,14 @@
     <priority>0.8</priority>
   </url>
 
-  <!-- Template preview pages -->
-  <url>
-    <loc>https://invite.shyara.co.in/templates/royal-gold/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/floral-garden/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/eternal-vows/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
+  <!-- Template pages -->
   <url>
     <loc>https://invite.shyara.co.in/templates/rustic-charm/preview</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://invite.shyara.co.in/templates/celestial-dreams/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/midnight-bloom/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/golden-ring/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/rose-garden/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/confetti-burst/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/neon-glow/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/little-star/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/sweet-arrival/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/executive-edge/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/modern-summit/preview</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://invite.shyara.co.in/templates/timeless-love/preview</loc>
+    <loc>https://invite.shyara.co.in/samples/rustic-charm</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

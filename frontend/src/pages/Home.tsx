@@ -36,11 +36,6 @@ const stagger = { hidden: {}, visible: { transition: { staggerChildren: 0.08 } }
 
 const categories = [
   { name: "Wedding", emoji: "Wedding", value: "wedding" as const },
-  { name: "Engagement", emoji: "Engagement", value: "engagement" as const },
-  { name: "Birthday", emoji: "Birthday", value: "birthday" as const },
-  { name: "Baby Shower", emoji: "Baby shower", value: "baby-shower" as const },
-  { name: "Corporate", emoji: "Corporate", value: "corporate" as const },
-  { name: "Anniversary", emoji: "Anniversary", value: "anniversary" as const },
 ].map((item) => ({ ...item, count: getTemplatesByCategory(item.value).length }));
 
 const faqs = [
@@ -161,7 +156,7 @@ const valuePillars = [
 ];
 
 const quickAssurances = [
-  { title: "One-time pricing", desc: "$99 / \u20AC119 per template. No subscription." },
+  { title: "One-time pricing", desc: "$4.00 / \u20AC5.00 for Rustic Charm. No subscription." },
   { title: "Guests need no app", desc: "Everything opens in a normal browser." },
   { title: "Edit after publishing", desc: "Keep the same link and update details anytime." },
   { title: "Invite + guest ops", desc: "RSVP, reminders, collaboration, and exports included." },
@@ -224,7 +219,7 @@ const Home = () => {
   const [emblaRef, emblaApi] = useEmblaCarousel({ align: "start", containScroll: "trimSnaps" });
   const [selectedDot, setSelectedDot] = useState(0);
 
-  const royalGold = featured.find((item) => item.slug === "royal-gold") ?? allTemplates.find((item) => item.slug === "royal-gold")!;
+  const showcaseTemplate = featured[0] ?? allTemplates[0]!;
 
   useEffect(() => {
     let mounted = true;
@@ -281,7 +276,7 @@ const Home = () => {
                 <Link to="/templates">Browse Templates</Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="px-8 text-base">
-                <Link to="/samples/royal-gold">Open Live Sample</Link>
+                <Link to="/samples/rustic-charm">Open Live Sample</Link>
               </Button>
             </motion.div>
             <motion.div variants={fadeUp} className="mt-5 flex flex-wrap justify-center gap-2 lg:justify-start">
@@ -295,7 +290,7 @@ const Home = () => {
 
           <div className="w-full max-w-sm">
             <PhoneMockup className="drop-shadow-2xl">
-              <TemplateThumbnail config={royalGold} />
+              <TemplateThumbnail config={showcaseTemplate} />
             </PhoneMockup>
           </div>
         </div>
@@ -415,9 +410,9 @@ const Home = () => {
 
       <section id="featured-templates" className="px-6 py-20">
         <div className="container">
-          <h2 className="mb-4 text-center font-serif text-3xl font-bold md:text-4xl">Featured Templates</h2>
+          <h2 className="mb-4 text-center font-serif text-3xl font-bold md:text-4xl">Available Template</h2>
           <p className="mx-auto mb-12 max-w-3xl text-center text-muted-foreground font-body">
-            Choose the design you like first. Every paid template includes the same host-side features, so you are selecting the look, not giving up the system.
+            Rustic Charm is the available design. It includes the full host-side feature set for RSVP handling, reminders, guest coordination, and event operations.
           </p>
 
           {loading ? (
@@ -469,7 +464,7 @@ const Home = () => {
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button asChild>
-                <Link to="/samples/royal-gold">Open Sample Invite <ChevronRight className="ml-1 h-4 w-4" /></Link>
+                <Link to="/samples/rustic-charm">Open Sample Invite <ChevronRight className="ml-1 h-4 w-4" /></Link>
               </Button>
               <Button asChild variant="outline">
                 <Link to="/templates">Compare Templates</Link>
@@ -478,7 +473,7 @@ const Home = () => {
           </div>
 
           <div className="rounded-3xl border border-border bg-card p-6">
-            <PhoneMockup><TemplateThumbnail config={royalGold} /></PhoneMockup>
+            <PhoneMockup><TemplateThumbnail config={showcaseTemplate} /></PhoneMockup>
           </div>
         </div>
       </section>
@@ -522,11 +517,11 @@ const Home = () => {
 
           <div className="mt-12 grid gap-4 rounded-2xl border border-border bg-card p-6 md:grid-cols-3">
             <div>
-              <p className="text-3xl font-display font-bold">$99</p>
+              <p className="text-3xl font-display font-bold">$4</p>
               <p className="text-sm text-muted-foreground font-body">One-time USD price per template</p>
             </div>
             <div>
-              <p className="text-3xl font-display font-bold">{"\u20AC"}119</p>
+              <p className="text-3xl font-display font-bold">{"\u20AC"}5</p>
               <p className="text-sm text-muted-foreground font-body">One-time EUR price per template</p>
             </div>
             <div>

@@ -13,7 +13,7 @@ const navLinks = [
   { to: "/#how-it-works", label: "How It Works" },
   { to: "/#included", label: "What's Included" },
   { to: "/#host-tools", label: "Host Tools" },
-  { to: "/samples/royal-gold", label: "Live Sample" },
+  { to: "/samples/rustic-charm", label: "Live Sample" },
   { to: "/pricing", label: "Pricing" },
 ];
 
@@ -169,7 +169,7 @@ const Navbar = () => {
               { to: "/#how-it-works", label: "How It Works", icon: Wallet },
               { to: "/#included", label: "What's Included", icon: ShieldCheck },
               { to: "/#host-tools", label: "Host Tools", icon: LayoutDashboard },
-              { to: "/samples/royal-gold", label: "Live Sample", icon: PlayCircle },
+              { to: "/samples/rustic-charm", label: "Live Sample", icon: PlayCircle },
               { to: "/pricing", label: "Pricing", icon: Wallet },
               { to: "/#faq", label: "FAQ", icon: MessageSquareQuote },
               ...(isAuthenticated ? [{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),

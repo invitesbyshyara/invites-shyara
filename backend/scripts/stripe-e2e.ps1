@@ -114,31 +114,31 @@ try {
 
     $promoPercent = Invoke-Api -Method "POST" -Path "/api/checkout/validate-promo" -Headers $authHeaders -Body @{
         code = "WELCOME10"
-        templateSlug = "royal-gold"
+        templateSlug = "rustic-charm"
     }
     $promoFlat = Invoke-Api -Method "POST" -Path "/api/checkout/validate-promo" -Headers $authHeaders -Body @{
         code = "FLAT50"
-        templateSlug = "royal-gold"
+        templateSlug = "rustic-charm"
     }
     $freeCheckoutUsd = Invoke-Api -Method "POST" -Path "/api/checkout/create-order" -Headers $authHeaders -Body @{
         templateSlug = "rustic-charm"
         currency = "usd"
     }
     $paidCheckoutUsd = Invoke-Api -Method "POST" -Path "/api/checkout/create-order" -Headers $authHeaders -Body @{
-        templateSlug = "royal-gold"
+        templateSlug = "rustic-charm"
         currency = "usd"
     }
     $paidCheckoutEur = Invoke-Api -Method "POST" -Path "/api/checkout/create-order" -Headers $authHeaders -Body @{
-        templateSlug = "floral-garden"
+        templateSlug = "rustic-charm"
         currency = "eur"
     }
     $paidCheckoutUsdPercent = Invoke-Api -Method "POST" -Path "/api/checkout/create-order" -Headers $authHeaders -Body @{
-        templateSlug = "eternal-vows"
+        templateSlug = "rustic-charm"
         currency = "usd"
         promoCode = "WELCOME10"
     }
     $paidCheckoutUsdFlat = Invoke-Api -Method "POST" -Path "/api/checkout/create-order" -Headers $authHeaders -Body @{
-        templateSlug = "modern-summit"
+        templateSlug = "rustic-charm"
         currency = "usd"
         promoCode = "FLAT50"
     }

@@ -7,9 +7,9 @@ const config: TemplateConfig = {
   category: 'wedding',
   tags: ['rustic', 'barn', 'countryside', 'warm'],
   isPremium: true,
-  price: 9900,
-  priceUsd: 9900,
-  priceEur: 11900,
+  price: 400,
+  priceUsd: 400,
+  priceEur: 500,
   thumbnail: '/placeholder.svg',
   previewImages: ['/placeholder.svg'],
   supportedSections: ['hero', 'story', 'schedule', 'venue', 'rsvp'],
@@ -32,4 +32,3 @@ const config: TemplateConfig = {
 };
 
 export default config;
-

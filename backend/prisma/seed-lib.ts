@@ -36,31 +36,11 @@ export const DEFAULT_TEST_USER_PASSWORD = "ShyaraTest@2024";
 export const TEST_USER_EMAIL = "test@invitesbyshyara.com";
 
 const templates: SeedTemplate[] = [
-  { slug: "royal-gold", name: "Royal Gold", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "floral-garden", name: "Floral Garden", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "eternal-vows", name: "Eternal Vows", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "rustic-charm", name: "Rustic Charm", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "celestial-dreams", name: "Celestial Dreams", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "velvet-3d", name: "Velvet 3D", category: EventCategory.wedding, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "midnight-bloom", name: "Midnight Bloom", category: EventCategory.engagement, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "golden-ring", name: "Golden Ring", category: EventCategory.engagement, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "rose-garden", name: "Rose Garden", category: EventCategory.engagement, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "confetti-burst", name: "Confetti Burst", category: EventCategory.birthday, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "neon-glow", name: "Neon Glow", category: EventCategory.birthday, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "little-star", name: "Little Star", category: EventCategory.baby_shower, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "sweet-arrival", name: "Sweet Arrival", category: EventCategory.baby_shower, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "executive-edge", name: "Executive Edge", category: EventCategory.corporate, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "modern-summit", name: "Modern Summit", category: EventCategory.corporate, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
-  { slug: "timeless-love", name: "Timeless Love", category: EventCategory.anniversary, isPremium: true, price: 9900, priceUsd: 9900, priceEur: 11900 },
+  { slug: "rustic-charm", name: "Rustic Charm", category: EventCategory.wedding, isPremium: true, price: 400, priceUsd: 400, priceEur: 500 },
 ];
 
 const categories: SeedCategory[] = [
   { slug: EventCategory.wedding, name: "Weddings", emoji: "\u{1F492}", displayOrder: 1 },
-  { slug: EventCategory.engagement, name: "Engagements", emoji: "\u{1F48D}", displayOrder: 2 },
-  { slug: EventCategory.birthday, name: "Birthdays", emoji: "\u{1F382}", displayOrder: 3 },
-  { slug: EventCategory.baby_shower, name: "Baby Showers", emoji: "\u{1F476}", displayOrder: 4 },
-  { slug: EventCategory.corporate, name: "Corporate", emoji: "\u{1F3E2}", displayOrder: 5 },
-  { slug: EventCategory.anniversary, name: "Anniversaries", emoji: "\u{1F495}", displayOrder: 6 },
 ];
 
 const settings = {
@@ -82,6 +62,33 @@ const promoCodes: SeedPromoCode[] = [
 ];
 
 export async function seedCore(prisma: PrismaClient) {
+  const activeCategorySlugs = categories.map((category) => category.slug);
+  const activeTemplateSlugs = templates.map((template) => template.slug);
+
+  await prisma.category.deleteMany({
+    where: {
+      slug: { notIn: activeCategorySlugs },
+    },
+  });
+
+  await prisma.template.updateMany({
+    where: {
+      slug: { notIn: activeTemplateSlugs },
+    },
+    data: {
+      isVisible: false,
+      isFeatured: false,
+    },
+  });
+
+  await prisma.template.deleteMany({
+    where: {
+      slug: { notIn: activeTemplateSlugs },
+      purchases: { none: {} },
+      invites: { none: {} },
+    },
+  });
+
   for (const category of categories) {
     await prisma.category.upsert({
       where: { slug: category.slug },
@@ -102,7 +109,7 @@ export async function seedCore(prisma: PrismaClient) {
         ...template,
         tags: [template.category, template.isPremium ? "premium" : "free"],
         isVisible: true,
-        isFeatured: index < 5,
+        isFeatured: true,
         sortOrder: index + 1,
       },
       update: {
@@ -114,7 +121,7 @@ export async function seedCore(prisma: PrismaClient) {
         priceEur: template.priceEur,
         tags: [template.category, template.isPremium ? "premium" : "free"],
         isVisible: true,
-        isFeatured: index < 5,
+        isFeatured: true,
         sortOrder: index + 1,
       },
     });

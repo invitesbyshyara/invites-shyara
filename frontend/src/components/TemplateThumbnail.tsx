@@ -8,22 +8,7 @@ interface Props {
 const themes: Record<string, {
   bg: string; accent: string; text: string; sub: string;
 }> = {
-  'royal-gold': { bg: 'linear-gradient(160deg, hsl(38,30%,8%) 0%, hsl(38,25%,5%) 100%)', accent: 'hsl(38,65%,50%)', text: 'hsl(38,60%,70%)', sub: 'hsl(38,20%,40%)' },
-  'floral-garden': { bg: 'linear-gradient(160deg, hsl(120,20%,95%) 0%, hsl(150,25%,90%) 100%)', accent: 'hsl(150,45%,45%)', text: 'hsl(150,30%,25%)', sub: 'hsl(150,15%,50%)' },
-  'eternal-vows': { bg: 'linear-gradient(160deg, hsl(0,0%,98%) 0%, hsl(345,15%,95%) 100%)', accent: 'hsl(345,50%,50%)', text: 'hsl(345,30%,20%)', sub: 'hsl(345,15%,55%)' },
   'rustic-charm': { bg: 'linear-gradient(160deg, hsl(30,30%,92%) 0%, hsl(25,25%,85%) 100%)', accent: 'hsl(25,55%,45%)', text: 'hsl(25,40%,22%)', sub: 'hsl(25,20%,50%)' },
-  'celestial-dreams': { bg: 'linear-gradient(160deg, hsl(230,30%,10%) 0%, hsl(260,25%,8%) 100%)', accent: 'hsl(45,80%,70%)', text: 'hsl(230,20%,85%)', sub: 'hsl(230,15%,50%)' },
-  'midnight-bloom': { bg: 'linear-gradient(160deg, hsl(280,20%,8%) 0%, hsl(310,18%,6%) 100%)', accent: 'hsl(330,50%,65%)', text: 'hsl(330,40%,85%)', sub: 'hsl(330,15%,45%)' },
-  'golden-ring': { bg: 'linear-gradient(160deg, hsl(39,35%,95%) 0%, hsl(39,30%,90%) 100%)', accent: 'hsl(39,70%,50%)', text: 'hsl(39,40%,20%)', sub: 'hsl(39,20%,50%)' },
-  'rose-garden': { bg: 'linear-gradient(160deg, hsl(350,30%,95%) 0%, hsl(340,25%,92%) 100%)', accent: 'hsl(350,60%,55%)', text: 'hsl(350,35%,25%)', sub: 'hsl(350,15%,55%)' },
-  'confetti-burst': { bg: 'linear-gradient(160deg, hsl(45,100%,97%) 0%, hsl(45,80%,94%) 100%)', accent: 'hsl(350,85%,55%)', text: 'hsl(350,80%,35%)', sub: 'hsl(350,20%,50%)' },
-  'neon-glow': { bg: 'linear-gradient(160deg, hsl(260,30%,8%) 0%, hsl(280,25%,5%) 100%)', accent: 'hsl(170,100%,50%)', text: 'hsl(0,0%,95%)', sub: 'hsl(260,15%,45%)' },
-  'little-star': { bg: 'linear-gradient(160deg, hsl(210,40%,95%) 0%, hsl(200,35%,92%) 100%)', accent: 'hsl(45,80%,55%)', text: 'hsl(210,30%,25%)', sub: 'hsl(210,15%,55%)' },
-  'sweet-arrival': { bg: 'linear-gradient(160deg, hsl(340,35%,95%) 0%, hsl(330,30%,93%) 100%)', accent: 'hsl(340,50%,60%)', text: 'hsl(340,30%,25%)', sub: 'hsl(340,15%,55%)' },
-  'executive-edge': { bg: 'linear-gradient(160deg, hsl(220,15%,12%) 0%, hsl(220,20%,8%) 100%)', accent: 'hsl(210,70%,55%)', text: 'hsl(0,0%,92%)', sub: 'hsl(220,10%,50%)' },
-  'modern-summit': { bg: 'linear-gradient(160deg, hsl(0,0%,98%) 0%, hsl(220,10%,95%) 100%)', accent: 'hsl(220,80%,50%)', text: 'hsl(220,25%,15%)', sub: 'hsl(220,10%,55%)' },
-  'timeless-love': { bg: 'linear-gradient(160deg, hsl(20,35%,94%) 0%, hsl(15,30%,90%) 100%)', accent: 'hsl(20,60%,45%)', text: 'hsl(20,40%,20%)', sub: 'hsl(20,15%,50%)' },
-  'velvet-3d':     { bg: 'linear-gradient(160deg, hsl(340,18%,7%) 0%, hsl(340,20%,11%) 100%)', accent: 'hsl(38,65%,58%)', text: 'hsl(38,70%,72%)', sub: 'hsl(340,12%,50%)' },
 };
 
 const categoryEmoji: Record<EventCategory, string> = {
@@ -52,7 +37,7 @@ const TemplateThumbnail = ({ config, className = '' }: Props) => {
     accent: 'hsl(220,60%,50%)', text: 'hsl(220,30%,20%)', sub: 'hsl(220,10%,50%)',
   };
 
-  const isDark = config.slug.includes('gold') || config.slug.includes('midnight') || config.slug.includes('celestial') || config.slug.includes('neon') || config.slug.includes('executive') || config.slug.includes('velvet');
+  const isDark = false;
 
   return (
     <div className={`w-full h-full flex flex-col items-center justify-center p-6 relative overflow-hidden select-none ${className}`} style={{ background: t.bg }}>

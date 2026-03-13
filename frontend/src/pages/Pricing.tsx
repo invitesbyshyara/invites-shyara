@@ -95,6 +95,7 @@ const groupedFeatures = [
 const Pricing = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const { currency } = useCurrency();
+  const displayPrice = currency === "USD" ? "$4.00" : "\u20AC5.00";
 
   return (
     <div className="min-h-screen bg-background">
@@ -114,9 +115,9 @@ const Pricing = () => {
               One-Time Payment
             </span>
             <h2 className="mt-5 font-serif text-2xl font-bold">Pay Per Template</h2>
-            <p className="mt-2 text-4xl font-serif font-bold text-foreground">{currency === "USD" ? "$99" : "\u20AC119"}</p>
+            <p className="mt-2 text-4xl font-serif font-bold text-foreground">{displayPrice}</p>
             <p className="mt-2 text-sm text-muted-foreground font-body">
-              Pay once, personalize after purchase, publish a live link, and continue editing later.
+              Pay once for Rustic Charm, personalize after purchase, publish a live link, and continue editing later.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
@@ -203,7 +204,7 @@ const Pricing = () => {
           <p className="mb-6 text-muted-foreground font-body">You can compare templates and open live samples before you spend anything.</p>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="font-body"><Link to="/templates">Browse Templates</Link></Button>
-            <Button asChild size="lg" variant="outline" className="font-body"><Link to="/samples/royal-gold">Open Live Sample</Link></Button>
+            <Button asChild size="lg" variant="outline" className="font-body"><Link to="/samples/rustic-charm">Open Live Sample</Link></Button>
           </div>
         </div>
       </div>

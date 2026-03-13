@@ -107,7 +107,7 @@ const run = async (label: string, fn: () => Promise<void>) => {
     sendPaymentFailedEmail(TO, {
       name: "Priya Sharma",
       templateName: "Velvet 3D",
-      retryUrl: `${FRONTEND_URL}/checkout/velvet-3d`,
+      retryUrl: `${FRONTEND_URL}/checkout/rustic-charm`,
     }),
   );
 

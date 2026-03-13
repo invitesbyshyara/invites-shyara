@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { api } from "@/services/api";
-import { categories } from "@/templates/registry";
+import { allTemplates, categories } from "@/templates/registry";
 import { EventCategory, TemplateConfig } from "@/types";
 
-const POPULAR_SLUG = "royal-gold";
+const POPULAR_SLUG = "rustic-charm";
 const platformTags = ["RSVP", "Broadcasts", "Ops Pack"];
 
 const Gallery = () => {
@@ -36,7 +36,7 @@ const Gallery = () => {
     }).then((results) => {
       if (mounted) setTemplates(results);
     }).catch(() => {
-      if (mounted) setTemplates([]);
+      if (mounted) setTemplates(allTemplates);
     }).finally(() => {
       if (mounted) setLoading(false);
     });
@@ -79,7 +79,7 @@ const Gallery = () => {
       <div className="container px-4 py-10">
         <h1 className="mb-2 text-center font-serif text-3xl font-bold md:text-4xl">Template Gallery</h1>
         <p className="mb-8 text-center text-muted-foreground font-body">
-          Browse every design, preview the full experience, and remember that every paid template includes the same host-side system for RSVP handling, reminders, guest coordination, and event operations.
+          Browse the available design, preview the full experience, and remember that Rustic Charm includes the same host-side system for RSVP handling, reminders, guest coordination, and event operations.
         </p>
 
         <div className="mb-8 space-y-4 rounded-2xl border border-border bg-card p-4 md:p-5">
