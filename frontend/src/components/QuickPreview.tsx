@@ -6,13 +6,13 @@ import { TemplateConfig } from "@/types";
 import PhoneMockup from "@/components/PhoneMockup";
 import TemplateThumbnail from "@/components/TemplateThumbnail";
 
-interface Props {
+interface QuickPreviewProps {
   template: TemplateConfig | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const QuickPreview = ({ template, open, onOpenChange }: Props) => {
+const QuickPreview = ({ template, open, onOpenChange }: QuickPreviewProps) => {
   const { currency, formatPrice } = useCurrency();
 
   if (!template) {
@@ -24,7 +24,7 @@ const QuickPreview = ({ template, open, onOpenChange }: Props) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg p-0 overflow-hidden bg-background border-border">
-        <DialogTitle className="sr-only">{template.name} Preview</DialogTitle>
+        <DialogTitle className="sr-only">{template.name} quick preview</DialogTitle>
         <div className="flex flex-col items-center py-8 px-6">
           <PhoneMockup>
             <TemplateThumbnail config={template} />
@@ -33,16 +33,20 @@ const QuickPreview = ({ template, open, onOpenChange }: Props) => {
           <div className="mt-6 text-center w-full">
             <h3 className="font-display text-xl font-bold">{template.name}</h3>
             <p className="text-sm text-muted-foreground font-body capitalize mt-1">
-              {template.category.replace("-", " ")} · {formatPrice(price)}
+              {template.category.replace("-", " ")} • {formatPrice(price)}
             </p>
-            <div className="flex gap-3 mt-5 justify-center">
+            <p className="text-sm text-muted-foreground font-body mt-3">
+              Preview the design first. Personalization starts after purchase.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-3 mt-5">
               <Button variant="outline" className="font-body" asChild>
-                <Link to={`/templates/${template.slug}/preview`}>
-                  Full Preview
-                </Link>
+                <Link to={`/templates/${template.slug}/preview`}>Studio Preview</Link>
+              </Button>
+              <Button variant="outline" className="font-body" asChild>
+                <Link to={`/samples/${template.slug}`}>Live Sample</Link>
               </Button>
               <Button asChild className="font-body">
-                <Link to={`/checkout/${template.slug}`}>Use This Template</Link>
+                <Link to={`/checkout/${template.slug}`}>Buy & Customize</Link>
               </Button>
             </div>
           </div>

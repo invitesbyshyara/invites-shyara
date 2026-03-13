@@ -1,4 +1,20 @@
-import { EventCategory, Invite, InviteStatus, PublicInviteData, Rsvp, TemplateConfig, User } from "@/types";
+import {
+  BroadcastAudience,
+  EventCategory,
+  Invite,
+  InviteBroadcast,
+  InviteCollaborator,
+  InviteGuest,
+  InviteStatus,
+  InviteWorkspace,
+  LocalizationSettings,
+  OperationsSummary,
+  PublicInviteData,
+  Rsvp,
+  RsvpSettings,
+  TemplateConfig,
+  User,
+} from "@/types";
 import { allTemplates, getTemplateBySlug } from "@/templates/registry";
 
 type ApiResponse<T> = {
@@ -196,6 +212,7 @@ const mapInvite = (raw: {
   createdAt: string;
   updatedAt: string;
   rsvpCount?: number;
+  accessRole?: string;
 }) => ({
   id: raw.id,
   userId: raw.userId,
@@ -208,6 +225,7 @@ const mapInvite = (raw: {
   updatedAt: raw.updatedAt,
   rsvpCount: raw.rsvpCount ?? 0,
   isPurchased: true,
+  accessRole: raw.accessRole,
 });
 
 type CheckoutOrderResponse = {
@@ -362,14 +380,20 @@ export const api = {
     return request<{ message: string }>(`/invites/${inviteId}`, { method: "DELETE" }, true);
   },
 
-  getPublicInvite: async (slug: string): Promise<PublicInviteData> => {
+  getPublicInvite: async (slug: string, options?: { guestToken?: string; language?: string }): Promise<PublicInviteData> => {
+    const query = new URLSearchParams();
+    if (options?.guestToken) query.set("guest", options.guestToken);
+    if (options?.language) query.set("lang", options.language);
     const data = await request<{
       templateSlug?: string;
       templateCategory?: string;
       data?: Record<string, unknown>;
       inviteId?: string;
       status?: string;
-    }>(`/public/invites/${slug}`);
+      selectedLanguage?: string;
+      languages?: string[];
+      viewer?: PublicInviteData["viewer"];
+    }>(`/public/invites/${slug}${query.size ? `?${query.toString()}` : ""}`);
 
     if (data.inviteId) {
       inviteSlugMap.set(data.inviteId, slug);
@@ -381,6 +405,9 @@ export const api = {
       data: (data.data ?? {}) as Record<string, unknown>,
       inviteId: data.inviteId ?? "",
       status: data.status ? normalizeStatus(data.status) : undefined,
+      selectedLanguage: data.selectedLanguage,
+      languages: data.languages ?? [],
+      viewer: data.viewer,
     };
   },
 
@@ -401,14 +428,24 @@ export const api = {
   submitRsvp: async (
     inviteId: string,
     data: {
+      guestToken?: string;
+      language?: string;
       name: string;
       response: "yes" | "no" | "maybe";
       guestCount: number;
       message: string;
       email?: string;
-      mealPreference?: string;
+      phone?: string;
+      household?: string;
+      adultCount?: number;
+      childCount?: number;
+      mealChoice?: string;
       dietaryRestrictions?: string;
-      _hp?: string;
+      stayNeeded?: boolean;
+      roomRequirement?: string;
+      transportNeeded?: boolean;
+      transportMode?: string;
+      customAnswers?: Record<string, unknown>;
     },
   ) => {
     const slug = inviteSlugMap.get(inviteId);
@@ -422,8 +459,14 @@ export const api = {
     });
   },
 
-  getRsvpConfig: async (inviteId: string): Promise<{ mealOptions: string[]; rsvpDeadline?: string }> => {
-    return request<{ mealOptions: string[]; rsvpDeadline?: string }>(`/public/invites/${inviteId}/rsvp-config`);
+  getRsvpConfig: async (
+    inviteId: string,
+    options?: { guestToken?: string; language?: string }
+  ): Promise<RsvpSettings> => {
+    const query = new URLSearchParams();
+    if (options?.guestToken) query.set("guest", options.guestToken);
+    if (options?.language) query.set("lang", options.language);
+    return request<RsvpSettings>(`/public/invites/${inviteId}/rsvp-config${query.size ? `?${query.toString()}` : ""}`);
   },
 
   trackView: async (slug: string): Promise<void> => {
@@ -448,6 +491,113 @@ export const api = {
       deviceBreakdown: { mobile: number; desktop: number; tablet: number };
       referrerBreakdown: { direct: number; whatsapp: number; facebook: number; other: number };
     }>(`/invites/${inviteId}/analytics`, {}, true);
+  },
+
+  getInviteWorkspace: async (inviteId: string) => {
+    return request<InviteWorkspace>(`/invite-ops/${inviteId}`, {}, true);
+  },
+
+  updateInviteRsvpSettings: async (inviteId: string, settings: RsvpSettings) => {
+    return request<{ rsvpSettings: RsvpSettings }>(
+      `/invite-ops/${inviteId}/rsvp-settings`,
+      {
+        method: "PUT",
+        body: JSON.stringify(settings),
+      },
+      true,
+    );
+  },
+
+  updateInviteLocalization: async (inviteId: string, localization: LocalizationSettings) => {
+    return request<{ localization: LocalizationSettings }>(
+      `/invite-ops/${inviteId}/localization`,
+      {
+        method: "PUT",
+        body: JSON.stringify(localization),
+      },
+      true,
+    );
+  },
+
+  createInviteGuest: async (inviteId: string, guest: Partial<InviteGuest> & { name: string }) => {
+    return request<InviteGuest>(
+      `/invite-ops/${inviteId}/guests`,
+      {
+        method: "POST",
+        body: JSON.stringify(guest),
+      },
+      true,
+    );
+  },
+
+  updateInviteGuest: async (inviteId: string, guestId: string, guest: Partial<InviteGuest> & { name: string }) => {
+    return request<InviteGuest>(
+      `/invite-ops/${inviteId}/guests/${guestId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(guest),
+      },
+      true,
+    );
+  },
+
+  deleteInviteGuest: async (inviteId: string, guestId: string) => {
+    return request<{ message: string }>(`/invite-ops/${inviteId}/guests/${guestId}`, { method: "DELETE" }, true);
+  },
+
+  createInviteBroadcast: async (
+    inviteId: string,
+    payload: {
+      type: InviteBroadcast["type"];
+      title: string;
+      subject?: string;
+      message: string;
+      language: string;
+      audience: BroadcastAudience;
+    }
+  ) => {
+    return request<InviteBroadcast>(
+      `/invite-ops/${inviteId}/broadcasts`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      true,
+    );
+  },
+
+  inviteCollaborator: async (
+    inviteId: string,
+    payload: Pick<InviteCollaborator, "email" | "name" | "roleLabel" | "permissions">
+  ) => {
+    return request<InviteCollaborator>(
+      `/invite-ops/${inviteId}/collaborators`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      true,
+    );
+  },
+
+  removeCollaborator: async (inviteId: string, collaboratorId: string) => {
+    return request<{ message: string }>(
+      `/invite-ops/${inviteId}/collaborators/${collaboratorId}`,
+      { method: "DELETE" },
+      true,
+    );
+  },
+
+  getInviteAutomation: async (inviteId: string) => {
+    return request<OperationsSummary>(`/invite-ops/${inviteId}/automation`, {}, true);
+  },
+
+  getInviteExportPack: async (inviteId: string) => {
+    return request<{ generatedAt: string; files: Array<{ filename: string; content: string }> }>(
+      `/invite-ops/${inviteId}/export-pack`,
+      {},
+      true,
+    );
   },
 
   login: async (email: string, password: string) => {

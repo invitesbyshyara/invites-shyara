@@ -11,6 +11,7 @@ import { prisma } from "./lib/prisma";
 import authRoutes from "./routes/auth";
 import templateRoutes from "./routes/templates";
 import inviteRoutes from "./routes/invites";
+import inviteOpsRoutes from "./routes/invite-ops";
 import publicRoutes from "./routes/public";
 import checkoutRoutes from "./routes/checkout";
 import shareRoutes from "./routes/share";
@@ -130,6 +131,7 @@ app.use("/api/public/invites/:slug/rsvp", rsvpLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/templates", templateRoutes);
 app.use("/api/invites", inviteRoutes);
+app.use("/api/invite-ops", inviteOpsRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/checkout", checkoutRoutes);
 

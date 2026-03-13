@@ -6,6 +6,7 @@ import { verifyToken } from "../middleware/auth";
 import { upload } from "../middleware/upload";
 import { validate } from "../middleware/validate";
 import { sendInvitePublishedEmail } from "../services/email";
+import { collaboratorHasAnyPermission, getInviteAccess } from "../services/inviteOps";
 import { validateSlugFormat, isInviteSlugAvailable } from "../services/slug";
 import { uploadBufferToCloudinary } from "../services/storage";
 import { env } from "../lib/env";
@@ -15,6 +16,23 @@ const router = Router();
 
 const statusSchema = z.enum(["draft", "published", "expired"]);
 
+const requireInviteAccess = async (
+  userId: string,
+  inviteId: string,
+  permissions?: Array<"edit_content" | "manage_rsvps" | "send_reminders" | "view_reports" | "handle_guest_support">
+) => {
+  const access = await getInviteAccess(userId, inviteId);
+  if (!access) {
+    throw new AppError("Invite not found", 404);
+  }
+
+  if (!access.isOwner && permissions && !collaboratorHasAnyPermission(access.collaborator, permissions)) {
+    throw new AppError("You do not have permission for this invite", 403);
+  }
+
+  return access;
+};
+
 router.get(
   "/",
   verifyToken,
@@ -22,10 +40,31 @@ router.get(
     const userId = req.user!.id;
 
     const invites = await prisma.invite.findMany({
-      where: { userId },
+      where: {
+        OR: [
+          { userId },
+          {
+            collaborators: {
+              some: {
+                userId,
+                status: "active",
+              },
+            },
+          },
+        ],
+      },
       include: {
         _count: {
           select: { rsvps: true },
+        },
+        collaborators: {
+          where: {
+            userId,
+            status: "active",
+          },
+          select: {
+            roleLabel: true,
+          },
         },
       },
       orderBy: { updatedAt: "desc" },
@@ -34,6 +73,7 @@ router.get(
     const enriched = invites.map((invite) => ({
       ...invite,
       rsvpCount: invite._count.rsvps,
+      accessRole: invite.userId === userId ? "owner" : invite.collaborators[0]?.roleLabel ?? "collaborator",
     }));
 
     return sendSuccess(res, enriched);
@@ -152,11 +192,10 @@ router.get(
   verifyToken,
   validate({ params: z.object({ id: z.string().min(1) }) }),
   asyncHandler(async (req, res) => {
+    const access = await requireInviteAccess(req.user!.id, req.params.id);
+
     const invite = await prisma.invite.findFirst({
-      where: {
-        id: req.params.id,
-        userId: req.user!.id,
-      },
+      where: { id: access.invite.id },
       include: {
         _count: {
           select: { rsvps: true },
@@ -180,20 +219,15 @@ router.get(
   verifyToken,
   validate({ params: z.object({ id: z.string().min(1) }) }),
   asyncHandler(async (req, res) => {
-    const invite = await prisma.invite.findFirst({
-      where: {
-        id: req.params.id,
-        userId: req.user!.id,
-      },
-      select: { id: true },
-    });
-
-    if (!invite) {
-      throw new AppError("Invite not found", 404);
-    }
+    const access = await requireInviteAccess(req.user!.id, req.params.id, [
+      "manage_rsvps",
+      "handle_guest_support",
+      "view_reports",
+      "edit_content",
+    ]);
 
     const rsvps = await prisma.rsvp.findMany({
-      where: { inviteId: invite.id },
+      where: { inviteId: access.invite.id },
       orderBy: { submittedAt: "desc" },
     });
 
@@ -219,16 +253,8 @@ router.put(
       status?: "draft" | "published" | "expired";
     };
 
-    const existing = await prisma.invite.findFirst({
-      where: {
-        id,
-        userId: req.user!.id,
-      },
-    });
-
-    if (!existing) {
-      throw new AppError("Invite not found", 404);
-    }
+    const access = await requireInviteAccess(req.user!.id, id, ["edit_content"]);
+    const existing = access.invite;
 
     if (slug !== undefined) {
       if (!validateSlugFormat(slug)) {
@@ -266,7 +292,13 @@ router.put(
 
     if (status === "published" && existing.status !== "published") {
       const inviteUrl = `${env.FRONTEND_URL}/i/${updated.slug}`;
-      await sendInvitePublishedEmail(req.user!.email, inviteUrl);
+      const owner = await prisma.user.findUnique({
+        where: { id: existing.userId },
+        select: { email: true },
+      });
+      if (owner?.email) {
+        await sendInvitePublishedEmail(owner.email, inviteUrl);
+      }
     }
 
     return sendSuccess(res, {

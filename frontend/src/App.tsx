@@ -1,15 +1,16 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { AdminAuthProvider } from "@/admin/contexts/AdminAuthContext";
 import ImpersonationBanner from "@/admin/components/ImpersonationBanner";
 import CookieConsent from "@/components/CookieConsent";
 import { ThemeProvider } from "next-themes";
+import { MotionConfig } from "framer-motion";
 
 // Customer pages
 const Home = lazy(() => import("./pages/Home"));
@@ -24,12 +25,14 @@ const Checkout = lazy(() => import("./pages/Checkout"));
 const CreateInvite = lazy(() => import("./pages/CreateInvite"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const EditInvite = lazy(() => import("./pages/EditInvite"));
+const InviteOperations = lazy(() => import("./pages/InviteOperations"));
 const RsvpManagement = lazy(() => import("./pages/RsvpManagement"));
 const Account = lazy(() => import("./pages/Account"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const PublishSuccess = lazy(() => import("./pages/PublishSuccess"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const LiveInvite = lazy(() => import("./pages/LiveInvite"));
+const SampleInvite = lazy(() => import("./pages/SampleInvite"));
 
 // Admin pages
 const AdminLogin = lazy(() => import("./admin/pages/AdminLogin"));
@@ -51,6 +54,29 @@ const AdminSettings = lazy(() => import("./admin/pages/Settings"));
 
 const queryClient = new QueryClient();
 
+const ScrollToHash = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!location.hash) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const id = location.hash.replace("#", "");
+    const target = document.getElementById(id);
+    if (!target) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [location.pathname, location.hash]);
+
+  return null;
+};
+
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
     <div className="text-center">
@@ -62,69 +88,74 @@ const PageLoader = () => (
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <CurrencyProvider>
-          <TooltipProvider>
-            <BrowserRouter>
-              <Toaster />
-              <Sonner />
-              <ImpersonationBanner />
-              <CookieConsent />
-              <Suspense fallback={<PageLoader />}>
-              <Routes>
-              {/* Public pages */}
-              <Route path="/" element={<Home />} />
-              <Route path="/templates" element={<Gallery />} />
-              <Route path="/templates/:slug/preview" element={<TemplatePreview />} />
-              <Route path="/pricing" element={<Pricing />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <CurrencyProvider>
+            <TooltipProvider>
+              <BrowserRouter>
+                <ScrollToHash />
+                <Toaster />
+                <Sonner />
+                <ImpersonationBanner />
+                <CookieConsent />
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    {/* Public pages */}
+                    <Route path="/" element={<Home />} />
+                    <Route path="/templates" element={<Gallery />} />
+                    <Route path="/templates/:slug/preview" element={<TemplatePreview />} />
+                    <Route path="/samples/:slug" element={<SampleInvite />} />
+                    <Route path="/pricing" element={<Pricing />} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="/terms" element={<Terms />} />
 
-              {/* Auth pages */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
+                    {/* Auth pages */}
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/register" element={<Register />} />
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
 
-              {/* Authenticated pages */}
-              <Route path="/checkout/:slug" element={<Checkout />} />
-              <Route path="/create/:inviteId" element={<CreateInvite />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/dashboard/invites/:inviteId/edit" element={<EditInvite />} />
-              <Route path="/dashboard/invites/:inviteId/rsvps" element={<RsvpManagement />} />
-              <Route path="/account" element={<Account />} />
-              <Route path="/publish-success/:inviteId" element={<PublishSuccess />} />
+                    {/* Authenticated pages */}
+                    <Route path="/checkout/:slug" element={<Checkout />} />
+                    <Route path="/create/:inviteId" element={<CreateInvite />} />
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/dashboard/invites/:inviteId/edit" element={<EditInvite />} />
+                    <Route path="/dashboard/invites/:inviteId/operations" element={<InviteOperations />} />
+                    <Route path="/dashboard/invites/:inviteId/rsvps" element={<RsvpManagement />} />
+                    <Route path="/account" element={<Account />} />
+                    <Route path="/publish-success/:inviteId" element={<PublishSuccess />} />
 
-              {/* Live invite */}
-              <Route path="/i/:slug" element={<LiveInvite />} />
+                    {/* Live invite */}
+                    <Route path="/i/:slug" element={<LiveInvite />} />
 
-              {/* Admin Portal */}
-              <Route path="/admin/login" element={<AdminAuthProvider><AdminLogin /></AdminAuthProvider>} />
-              <Route path="/admin" element={<AdminAuthProvider><AdminDashboard /></AdminAuthProvider>} />
-              <Route path="/admin/customers" element={<AdminAuthProvider><AdminCustomers /></AdminAuthProvider>} />
-              <Route path="/admin/customers/new" element={<AdminAuthProvider><AdminAddCustomer /></AdminAuthProvider>} />
-              <Route path="/admin/customers/:id" element={<AdminAuthProvider><AdminCustomerDetail /></AdminAuthProvider>} />
-              <Route path="/admin/invites" element={<AdminAuthProvider><AdminInvites /></AdminAuthProvider>} />
-              <Route path="/admin/invites/:id" element={<AdminAuthProvider><AdminInviteDetail /></AdminAuthProvider>} />
-              <Route path="/admin/templates" element={<AdminAuthProvider><AdminTemplates /></AdminAuthProvider>} />
-              <Route path="/admin/templates/new" element={<AdminAuthProvider><AdminAddTemplate /></AdminAuthProvider>} />
-              <Route path="/admin/templates/:slug" element={<AdminAuthProvider><AdminTemplateEdit /></AdminAuthProvider>} />
-              <Route path="/admin/transactions" element={<AdminAuthProvider><AdminTransactions /></AdminAuthProvider>} />
-              <Route path="/admin/transactions/failed" element={<AdminAuthProvider><AdminFailedPayments /></AdminAuthProvider>} />
-              <Route path="/admin/categories" element={<AdminAuthProvider><AdminCategories /></AdminAuthProvider>} />
-              <Route path="/admin/promo-codes" element={<AdminAuthProvider><AdminPromoCodes /></AdminAuthProvider>} />
-              <Route path="/admin/announcements" element={<AdminAuthProvider><AdminAnnouncements /></AdminAuthProvider>} />
-              <Route path="/admin/settings" element={<AdminAuthProvider><AdminSettings /></AdminAuthProvider>} />
+                    {/* Admin Portal */}
+                    <Route path="/admin/login" element={<AdminAuthProvider><AdminLogin /></AdminAuthProvider>} />
+                    <Route path="/admin" element={<AdminAuthProvider><AdminDashboard /></AdminAuthProvider>} />
+                    <Route path="/admin/customers" element={<AdminAuthProvider><AdminCustomers /></AdminAuthProvider>} />
+                    <Route path="/admin/customers/new" element={<AdminAuthProvider><AdminAddCustomer /></AdminAuthProvider>} />
+                    <Route path="/admin/customers/:id" element={<AdminAuthProvider><AdminCustomerDetail /></AdminAuthProvider>} />
+                    <Route path="/admin/invites" element={<AdminAuthProvider><AdminInvites /></AdminAuthProvider>} />
+                    <Route path="/admin/invites/:id" element={<AdminAuthProvider><AdminInviteDetail /></AdminAuthProvider>} />
+                    <Route path="/admin/templates" element={<AdminAuthProvider><AdminTemplates /></AdminAuthProvider>} />
+                    <Route path="/admin/templates/new" element={<AdminAuthProvider><AdminAddTemplate /></AdminAuthProvider>} />
+                    <Route path="/admin/templates/:slug" element={<AdminAuthProvider><AdminTemplateEdit /></AdminAuthProvider>} />
+                    <Route path="/admin/transactions" element={<AdminAuthProvider><AdminTransactions /></AdminAuthProvider>} />
+                    <Route path="/admin/transactions/failed" element={<AdminAuthProvider><AdminFailedPayments /></AdminAuthProvider>} />
+                    <Route path="/admin/categories" element={<AdminAuthProvider><AdminCategories /></AdminAuthProvider>} />
+                    <Route path="/admin/promo-codes" element={<AdminAuthProvider><AdminPromoCodes /></AdminAuthProvider>} />
+                    <Route path="/admin/announcements" element={<AdminAuthProvider><AdminAnnouncements /></AdminAuthProvider>} />
+                    <Route path="/admin/settings" element={<AdminAuthProvider><AdminSettings /></AdminAuthProvider>} />
 
-              {/* Catch-all */}
-              <Route path="*" element={<NotFound />} />
-              </Routes>
-              </Suspense>
-            </BrowserRouter>
-          </TooltipProvider>
-        </CurrencyProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+                    {/* Catch-all */}
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
+              </BrowserRouter>
+            </TooltipProvider>
+          </CurrencyProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </MotionConfig>
   </ThemeProvider>
 );
 export default App;

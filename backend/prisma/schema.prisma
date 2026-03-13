@@ -28,6 +28,7 @@ model User {
   purchases     UserTemplate[]
   transactions  Transaction[]
   refreshTokens RefreshToken[]
+  collaborations InviteCollaborator[] @relation("InviteCollaboratorUser")
 }
 
 enum UserPlan {
@@ -121,6 +122,9 @@ model Invite {
   template Template @relation(fields: [templateSlug], references: [slug])
   rsvps    Rsvp[]
   notes    AdminNote[]
+  guests   InviteGuest[]
+  broadcasts InviteBroadcast[]
+  collaborators InviteCollaborator[]
 
   @@index([userId])
   @@index([status])
@@ -137,17 +141,30 @@ enum InviteStatus {
 model Rsvp {
   id          String       @id @default(cuid())
   inviteId    String
+  guestId     String?
   invite      Invite       @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  guest       InviteGuest? @relation(fields: [guestId], references: [id], onDelete: SetNull)
   name        String
   email       String?
   response    RsvpResponse
   guestCount  Int          @default(1)
   message     String?
+  adultCount  Int?
+  childCount  Int?
+  mealChoice  String?
+  dietaryRestrictions String?
+  customAnswers Json?
+  stayNeeded  Boolean?
+  roomRequirement String?
+  transportNeeded Boolean?
+  transportMode String?
+  language    String?
   submittedAt DateTime     @default(now())
   ipAddress   String?
 
   @@index([inviteId])
   @@index([email])
+  @@index([guestId])
 }
 
 enum RsvpResponse {
@@ -264,4 +281,161 @@ enum EventCategory {
   baby_shower
   corporate
   anniversary
+}
+
+enum GuestInvitationStatus {
+  invited
+  confirmed
+  waitlisted
+  cancelled
+}
+
+enum CollaboratorStatus {
+  pending
+  active
+  revoked
+}
+
+enum BroadcastType {
+  venue_change
+  timing_update
+  rsvp_reminder
+  dress_code_reminder
+  weather_advisory
+  parking_update
+  photos_uploaded
+  post_event_thank_you
+  custom
+}
+
+enum BroadcastStatus {
+  draft
+  sent
+  partial
+}
+
+enum BroadcastRecipientStatus {
+  pending
+  sent
+  opened
+  bounced
+}
+
+model InviteGuest {
+  id                  String                 @id @default(cuid())
+  inviteId            String
+  token               String                 @unique @default(cuid())
+  name                String
+  email               String?
+  phone               String?
+  household           String?
+  audienceSegment     String                 @default("general")
+  tags                String[]               @default([])
+  language            String                 @default("en")
+  invitationStatus    GuestInvitationStatus  @default(invited)
+  response            RsvpResponse?
+  guestCount          Int                    @default(1)
+  adultCount          Int?
+  childCount          Int?
+  message             String?
+  mealChoice          String?
+  dietaryRestrictions String?
+  customAnswers       Json?
+  stayNeeded          Boolean                @default(false)
+  lodgingStatus       String?
+  hotelName           String?
+  roomType            String?
+  roomCount           Int                    @default(0)
+  checkInDate         DateTime?
+  checkOutDate        DateTime?
+  shuttleRequired     Boolean                @default(false)
+  transportMode       String?
+  arrivalDetails      String?
+  departureDetails    String?
+  parkingRequired     Boolean                @default(false)
+  supportNotes        String?
+  inviteSentAt        DateTime?
+  lastBroadcastAt     DateTime?
+  rsvpSubmittedAt     DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  invite              Invite                 @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  rsvps               Rsvp[]
+  broadcastRecipients BroadcastRecipient[]
+
+  @@index([inviteId])
+  @@index([email])
+  @@index([response])
+  @@index([audienceSegment])
+}
+
+model InviteCollaborator {
+  id              String             @id @default(cuid())
+  inviteId         String
+  userId          String?
+  email           String
+  name            String?
+  roleLabel       String             @default("collaborator")
+  permissions     String[]
+  status          CollaboratorStatus @default(pending)
+  invitedByUserId String
+  inviteToken     String             @unique @default(cuid())
+  invitedAt       DateTime           @default(now())
+  joinedAt        DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  invite          Invite             @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  user            User?              @relation("InviteCollaboratorUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([inviteId, email])
+  @@index([inviteId])
+  @@index([email])
+}
+
+model InviteBroadcast {
+  id              String          @id @default(cuid())
+  inviteId         String
+  type            BroadcastType
+  title           String
+  subject         String?
+  message         String
+  language        String          @default("en")
+  audience        Json
+  status          BroadcastStatus @default(draft)
+  sentAt          DateTime?
+  createdByUserId String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  invite          Invite          @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  recipients      BroadcastRecipient[]
+
+  @@index([inviteId])
+  @@index([sentAt])
+}
+
+model BroadcastRecipient {
+  id           String                   @id @default(cuid())
+  broadcastId  String
+  guestId      String?
+  email        String
+  name         String?
+  language     String                   @default("en")
+  status       BroadcastRecipientStatus @default(pending)
+  openToken    String                   @unique @default(cuid())
+  sentAt       DateTime?
+  openedAt     DateTime?
+  bouncedAt    DateTime?
+  errorMessage String?
+  inviteUrl    String?
+  createdAt    DateTime                 @default(now())
+
+  broadcast    InviteBroadcast          @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  guest        InviteGuest?             @relation(fields: [guestId], references: [id], onDelete: SetNull)
+
+  @@index([broadcastId])
+  @@index([guestId])
+  @@index([status])
 }

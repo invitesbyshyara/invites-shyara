@@ -1,6 +1,9 @@
 import { useState, useCallback, useMemo, useRef, useEffect, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AlertCircle, CheckCircle2, Clock3, Eye, Laptop, Link2, Smartphone, Sparkles } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { TemplateConfig, Invite, TemplateField } from '@/types';
 import { api } from '@/services/api';
@@ -12,11 +15,11 @@ import PhoneMockup from '@/components/PhoneMockup';
 import { CURATED_TRACKS as MUSIC_TRACKS } from '@/constants/musicTracks';
 
 const SECTION_META: Record<string, { label: string; description: string }> = {
-  story:    { label: 'Story / Description', description: 'Share your love story or event description' },
-  venue:    { label: 'Venue & Location',    description: 'Venue name, address, and directions' },
-  schedule: { label: 'Schedule / Timeline', description: 'Timeline of events during the day' },
-  gallery:  { label: 'Photo Gallery',       description: 'Include photos in your invitation' },
-  rsvp:     { label: 'RSVP',               description: 'Allow guests to respond to your invitation' },
+  story: { label: 'Story / Description', description: 'Share your love story or event description.' },
+  venue: { label: 'Venue & Location', description: 'Venue name, address, and directions.' },
+  schedule: { label: 'Schedule / Timeline', description: 'Timeline of events during the day.' },
+  gallery: { label: 'Photo Gallery', description: 'Include photos in your invitation.' },
+  rsvp: { label: 'RSVP', description: 'Allow guests to respond to your invitation.' },
 };
 
 interface InviteFormProps {
@@ -26,11 +29,41 @@ interface InviteFormProps {
 }
 
 const stepDefs = [
-  { key: 'basic', label: 'Event Details', sections: ['basic'] },
-  { key: 'venue', label: 'Venue & Story', sections: ['venue', 'story'] },
-  { key: 'media', label: 'Media & Schedule', sections: ['gallery', 'schedule', 'rsvp', 'settings'] },
-  { key: 'review', label: 'Review & Publish', sections: [] },
-];
+  {
+    key: 'basic',
+    label: 'Event Details',
+    description: 'Start with the names, date, and the first details guests need to see.',
+    sections: ['basic'],
+  },
+  {
+    key: 'venue',
+    label: 'Venue & Story',
+    description: 'Add the venue, your story, and optional guest extras.',
+    sections: ['venue', 'story'],
+  },
+  {
+    key: 'media',
+    label: 'Media & Schedule',
+    description: 'Configure photos, music, the schedule, and RSVP options.',
+    sections: ['gallery', 'schedule', 'rsvp', 'settings'],
+  },
+  {
+    key: 'review',
+    label: 'Review & Publish',
+    description: 'Confirm the final URL, check readiness, and publish.',
+    sections: [],
+  },
+] as const;
+
+const sectionLabels: Record<string, string> = {
+  basic: 'Basic Information',
+  venue: 'Venue Details',
+  story: 'Your Story',
+  schedule: 'Event Schedule',
+  gallery: 'Photos & Gallery',
+  rsvp: 'RSVP Settings',
+  settings: 'Additional Settings',
+};
 
 const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
   const [formData, setFormData] = useState<Record<string, any>>(invite.data || {});
@@ -42,37 +75,93 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [previewMode, setPreviewMode] = useState<'mobile' | 'desktop'>('mobile');
+  const [previewSheetOpen, setPreviewSheetOpen] = useState(false);
+  const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('saved');
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [enabledSections, setEnabledSections] = useState<string[]>(
     invite.data?.enabledSections ?? config.supportedSections
   );
-  const toggleSection = useCallback((section: string) => {
-    setEnabledSections(prev =>
-      prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]
-    );
-  }, []);
+  const [previewData, setPreviewData] = useState<Record<string, any>>(formData);
+
+  const hasMountedRef = useRef(false);
+  const autosaveRef = useRef<ReturnType<typeof setTimeout>>();
+  const previewDebounceRef = useRef<ReturnType<typeof setTimeout>>();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [previewData, setPreviewData] = useState<Record<string, any>>(formData);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
-
-  useEffect(() => {
-    debounceRef.current = setTimeout(() => setPreviewData({ ...formData }), 300);
-    return () => clearTimeout(debounceRef.current);
-  }, [formData]);
-
-  const handleFieldChange = useCallback((key: string, value: any) => {
-    setFormData(prev => ({ ...prev, [key]: value }));
-    setErrors(prev => { const n = { ...prev }; delete n[key]; return n; });
+  const markDirty = useCallback(() => {
+    setAutosaveState((previous) => (previous === 'saving' ? previous : 'idle'));
   }, []);
 
+  const handleSlugChange = useCallback((value: string) => {
+    setSlug(value);
+    markDirty();
+  }, [markDirty]);
+
+  const toggleSection = useCallback((section: string) => {
+    setEnabledSections((previous) =>
+      previous.includes(section) ? previous.filter((item) => item !== section) : [...previous, section]
+    );
+    markDirty();
+  }, [markDirty]);
+
+  useEffect(() => {
+    previewDebounceRef.current = setTimeout(() => setPreviewData({ ...formData }), 300);
+    return () => clearTimeout(previewDebounceRef.current);
+  }, [formData]);
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(autosaveRef.current);
+      clearTimeout(previewDebounceRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      setLastSavedAt(invite.updatedAt);
+      return;
+    }
+
+    if (publishing) {
+      return;
+    }
+
+    clearTimeout(autosaveRef.current);
+    setAutosaveState('idle');
+
+    autosaveRef.current = setTimeout(async () => {
+      setAutosaveState('saving');
+      try {
+        await api.updateInvite(invite.id, { data: { ...formData, enabledSections }, slug });
+        setAutosaveState('saved');
+        setLastSavedAt(new Date().toISOString());
+      } catch {
+        setAutosaveState('error');
+      }
+    }, 1200);
+
+    return () => clearTimeout(autosaveRef.current);
+  }, [enabledSections, formData, invite.id, invite.updatedAt, publishing, slug]);
+
+  const handleFieldChange = useCallback((key: string, value: any) => {
+    setFormData((previous) => ({ ...previous, [key]: value }));
+    setErrors((previous) => {
+      const next = { ...previous };
+      delete next[key];
+      return next;
+    });
+    markDirty();
+  }, [markDirty]);
+
   const handleBlur = useCallback((key: string) => {
-    setTouched(prev => ({ ...prev, [key]: true }));
+    setTouched((previous) => ({ ...previous, [key]: true }));
   }, []);
 
   const fieldsByStep = useMemo(() => {
-    return stepDefs.map(step =>
-      config.fields.filter(f => step.sections.includes(f.section || 'basic'))
+    return stepDefs.map((step) =>
+      config.fields.filter((field) => step.sections.includes(field.section || 'basic'))
     );
   }, [config.fields]);
 
@@ -87,62 +176,77 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
   }, [formData]);
 
   const validateStep = (step: number): Record<string, string> => {
-    const errs: Record<string, string> = {};
-    const fields = fieldsByStep[step];
-    if (!fields) return errs;
+    const stepErrors: Record<string, string> = {};
+    const stepFields = fieldsByStep[step];
+    if (!stepFields) return stepErrors;
 
     const today = new Date().toISOString().split('T')[0];
 
-    fields.forEach(f => {
-      const fieldSection = f.section === 'basic' ? 'hero' : (f.section ?? 'basic');
-      if (fieldSection !== 'hero' && fieldSection !== 'settings' && !enabledSections.includes(fieldSection)) return;
-      const val = formData[f.key];
-      if (f.required && (!val || (typeof val === 'string' && !val.trim()))) {
-        errs[f.key] = `${f.label} is required`;
+    stepFields.forEach((field) => {
+      const fieldSection = field.section === 'basic' ? 'hero' : (field.section ?? 'basic');
+      if (fieldSection !== 'hero' && fieldSection !== 'settings' && !enabledSections.includes(fieldSection)) {
+        return;
       }
-      if (f.type === 'date' && val && val < today && !isEditing) {
-        errs[f.key] = 'Date must be in the future';
+
+      const value = formData[field.key];
+      if (field.required && (!value || (typeof value === 'string' && !value.trim()))) {
+        stepErrors[field.key] = `${field.label} is required`;
+      }
+
+      if (field.type === 'date' && value && value < today && !isEditing) {
+        stepErrors[field.key] = 'Date must be in the future';
       }
     });
 
-    // Cross-field: RSVP deadline < event date
-    const eventDateField = fields.find(f => f.key.includes('Date') && f.key !== 'rsvpDeadline');
-    const rsvpField = fields.find(f => f.key === 'rsvpDeadline');
-    if (rsvpField && eventDateField) {
+    const eventDateField = stepFields.find((field) => field.key.includes('Date') && field.key !== 'rsvpDeadline');
+    const rsvpField = stepFields.find((field) => field.key === 'rsvpDeadline');
+
+    if (eventDateField && rsvpField) {
       const eventDate = formData[eventDateField.key];
       const rsvpDate = formData[rsvpField.key];
       if (eventDate && rsvpDate && rsvpDate >= eventDate) {
-        errs['rsvpDeadline'] = 'RSVP deadline must be before the event date';
+        stepErrors.rsvpDeadline = 'RSVP deadline must be before the event date';
       }
     }
 
-    return errs;
+    return stepErrors;
   };
 
   const handleNext = () => {
-    if (currentStep >= 3) return;
+    if (currentStep >= stepDefs.length - 1) return;
+
     const stepErrors = validateStep(currentStep);
     if (Object.keys(stepErrors).length > 0) {
-      setErrors(prev => ({ ...prev, ...stepErrors }));
+      setErrors((previous) => ({ ...previous, ...stepErrors }));
       const allTouched: Record<string, boolean> = {};
-      fieldsByStep[currentStep].forEach(f => { allTouched[f.key] = true; });
-      setTouched(prev => ({ ...prev, ...allTouched }));
+      fieldsByStep[currentStep].forEach((field) => {
+        allTouched[field.key] = true;
+      });
+      setTouched((previous) => ({ ...previous, ...allTouched }));
       toast({ title: 'Please fix the errors before proceeding', variant: 'destructive' });
       return;
     }
-    setCurrentStep(s => s + 1);
+
+    setCurrentStep((step) => step + 1);
   };
 
   const handlePrev = () => {
-    if (currentStep > 0) setCurrentStep(s => s - 1);
+    if (currentStep > 0) {
+      setCurrentStep((step) => step - 1);
+    }
   };
 
   const handleSaveDraft = async () => {
+    clearTimeout(autosaveRef.current);
     setSaving(true);
+    
     try {
       await api.updateInvite(invite.id, { data: { ...formData, enabledSections }, slug });
-      toast({ title: 'Draft saved!', description: 'Your progress has been saved.' });
+      setAutosaveState('saved');
+      setLastSavedAt(new Date().toISOString());
+      toast({ title: 'Draft saved', description: 'Your progress has been saved.' });
     } catch {
+      setAutosaveState('error');
       toast({ title: 'Failed to save', variant: 'destructive' });
     } finally {
       setSaving(false);
@@ -150,37 +254,55 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
   };
 
   const handlePublish = async () => {
-    const missing = config.fields.filter(f => {
-      if (!f.required) return false;
-      const fieldSection = f.section === 'basic' ? 'hero' : (f.section ?? 'basic');
-      if (fieldSection !== 'hero' && fieldSection !== 'settings' && !enabledSections.includes(fieldSection)) return false;
-      return !formData[f.key];
+    const missing = config.fields.filter((field) => {
+      if (!field.required) return false;
+      const fieldSection = field.section === 'basic' ? 'hero' : (field.section ?? 'basic');
+      if (fieldSection !== 'hero' && fieldSection !== 'settings' && !enabledSections.includes(fieldSection)) {
+        return false;
+      }
+      return !formData[field.key];
     });
+
     if (missing.length > 0) {
-      toast({ title: 'Missing required fields', description: missing.map(f => f.label).join(', '), variant: 'destructive' });
+      toast({
+        title: 'Missing required fields',
+        description: missing.map((field) => field.label).join(', '),
+        variant: 'destructive',
+      });
       return;
     }
+
     if (!slug) {
       toast({ title: 'Please set a URL slug', variant: 'destructive' });
       return;
     }
+
     setShowPublishConfirm(true);
   };
 
   const confirmPublish = async () => {
     setShowPublishConfirm(false);
+    clearTimeout(autosaveRef.current);
     setPublishing(true);
     const dataToSave = { ...formData, enabledSections };
+
     try {
       if (isEditing) {
         await api.updateInvite(invite.id, { data: dataToSave, status: 'published', slug });
-        toast({ title: 'Invite updated!', description: 'Changes are now live.' });
+        toast({ title: 'Invite updated', description: 'Changes are now live.' });
         navigate('/dashboard');
       } else {
-        const result = await api.createInvite({ templateSlug: config.slug, templateCategory: config.category, slug, eventData: dataToSave });
-        toast({ title: 'Invite published! 🎉', description: 'Your invitation is now live.' });
+        const result = await api.createInvite({
+          templateSlug: config.slug,
+          templateCategory: config.category,
+          slug,
+          eventData: dataToSave,
+        });
+        toast({ title: 'Invite published', description: 'Your invitation is now live.' });
         navigate(`/publish-success/${result.id}`);
       }
+      setAutosaveState('saved');
+      setLastSavedAt(new Date().toISOString());
     } catch {
       toast({ title: 'Failed to publish', variant: 'destructive' });
     } finally {
@@ -192,24 +314,110 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
 
   const effectiveConfig = useMemo(() => ({
     ...config,
-    supportedSections: config.supportedSections.filter(s => enabledSections.includes(s)),
+    supportedSections: config.supportedSections.filter((section) => enabledSections.includes(section)),
   }), [config, enabledSections]);
 
-  const sectionLabels: Record<string, string> = {
-    basic: 'Basic Information', venue: 'Venue Details', story: 'Your Story',
-    schedule: 'Event Schedule', gallery: 'Photos & Gallery', rsvp: 'RSVP Settings', settings: 'Additional Settings',
-  };
+  const requiredFields = useMemo(() => {
+    return config.fields.filter((field) => {
+      if (!field.required) return false;
+      const fieldSection = field.section === 'basic' ? 'hero' : (field.section ?? 'basic');
+      if (fieldSection !== 'hero' && fieldSection !== 'settings' && !enabledSections.includes(fieldSection)) {
+        return false;
+      }
+      return true;
+    });
+  }, [config.fields, enabledSections]);
+
+  const completedRequiredFields = useMemo(() => {
+    return requiredFields.filter((field) => {
+      const value = formData[field.key];
+      if (Array.isArray(value)) return value.length > 0;
+      if (typeof value === 'string') return value.trim().length > 0;
+      return Boolean(value);
+    }).length;
+  }, [formData, requiredFields]);
+
+  const completionPercent = requiredFields.length === 0
+    ? 100
+    : Math.round((completedRequiredFields / requiredFields.length) * 100);
+
+  const saveStatusLabel =
+    autosaveState === 'saving' ? 'Saving changes...' :
+    autosaveState === 'saved' ? `Saved${lastSavedAt ? ` ${new Date(lastSavedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}` :
+    autosaveState === 'error' ? 'Autosave failed' :
+    'Unsaved changes';
+
+  const saveStatusVariant =
+    autosaveState === 'error' ? 'destructive' :
+    autosaveState === 'saved' ? 'secondary' :
+    'outline';
+
+  const isPastEvent = useMemo(() => {
+    const eventDate = (formData.eventDate ?? formData.weddingDate ?? formData.partyDate ?? '') as string;
+    return Boolean(eventDate) && eventDate < new Date().toISOString().split('T')[0];
+  }, [formData.eventDate, formData.partyDate, formData.weddingDate]);
+
+  const publishChecks = useMemo(() => [
+    {
+      label: 'Required details added',
+      detail: `${completedRequiredFields} of ${requiredFields.length} required fields ready`,
+      complete: requiredFields.length === 0 || completedRequiredFields === requiredFields.length,
+    },
+    {
+      label: 'Shareable link selected',
+      detail: slug ? `${window.location.host}/i/${slug}` : 'Set your invite URL before publishing',
+      complete: Boolean(slug),
+    },
+    {
+      label: 'Sections configured',
+      detail: `${enabledSections.length} guest-facing section${enabledSections.length === 1 ? '' : 's'} enabled`,
+      complete: enabledSections.length > 0,
+    },
+  ], [completedRequiredFields, enabledSections.length, requiredFields.length, slug]);
+
+  const previewContent = (
+    <div className="rounded-2xl border border-border bg-muted overflow-hidden">
+      {previewMode === 'mobile' ? (
+        <div className="flex justify-center py-8">
+          <PhoneMockup>
+            <div className="h-[600px] overflow-y-auto">
+              <Suspense
+                fallback={
+                  <div className="min-h-[400px] flex items-center justify-center">
+                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                }
+              >
+                <TemplateRenderer config={effectiveConfig} data={previewData} isPreview />
+              </Suspense>
+            </div>
+          </PhoneMockup>
+        </div>
+      ) : (
+        <div className="max-h-[600px] overflow-y-auto bg-background">
+          <Suspense
+            fallback={
+              <div className="min-h-[400px] flex items-center justify-center">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            }
+          >
+            <TemplateRenderer config={effectiveConfig} data={previewData} isPreview />
+          </Suspense>
+        </div>
+      )}
+    </div>
+  );
 
   const renderStepFields = () => {
     const fields = fieldsByStep[currentStep];
     if (!fields || fields.length === 0) return null;
 
-    // Group by section within the step
     const groups: Record<string, TemplateField[]> = {};
-    fields.forEach(f => {
-      const section = f.section || 'basic';
+    fields.forEach((field) => {
+      const section = field.section || 'basic';
       if (!groups[section]) groups[section] = [];
-      groups[section].push(f);
+      groups[section].push(field);
     });
 
     return Object.entries(groups).map(([section, sectionFields]) => {
@@ -218,9 +426,9 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
       const meta = SECTION_META[section];
 
       return (
-        <div key={section} className="rounded-xl border border-border bg-card overflow-hidden">
+        <div key={section} className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
           {isToggleable ? (
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+            <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-border">
               <div>
                 <h3 className="font-display text-base font-semibold">{meta?.label ?? sectionLabels[section]}</h3>
                 <p className="text-xs text-muted-foreground font-body mt-0.5">{meta?.description}</p>
@@ -234,7 +442,7 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
           )}
           {isEnabled && (
             <div className="p-6 space-y-5">
-              {sectionFields.map(field => (
+              {sectionFields.map((field) => (
                 <FieldRenderer
                   key={field.key}
                   field={field}
@@ -252,368 +460,592 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
     });
   };
 
-  return (
-    <div className="min-h-[calc(100vh-4rem)]">
-      {/* Step Indicator */}
-      <div className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-16 z-40">
-        <div className="max-w-3xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            {stepDefs.map((step, i) => (
-              <div key={step.key} className="flex items-center flex-1">
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-body font-semibold transition-colors ${
-                    i < currentStep ? 'bg-primary text-primary-foreground' :
-                    i === currentStep ? 'bg-primary text-primary-foreground ring-2 ring-primary/30 ring-offset-2 ring-offset-background' :
-                    'bg-muted text-muted-foreground'
-                  }`}>
-                    {i < currentStep ? '✓' : i + 1}
-                  </div>
-                  <span className={`text-xs font-body hidden sm:inline ${i <= currentStep ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                    {step.label}
-                  </span>
-                </div>
-                {i < stepDefs.length - 1 && (
-                  <div className={`flex-1 h-px mx-3 ${i < currentStep ? 'bg-primary' : 'bg-border'}`} />
+  const renderVenueExtras = currentStep === 1 && (
+    <>
+      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="px-6 pt-6 pb-1">
+          <h3 className="font-display text-base font-semibold">Video</h3>
+          <p className="text-xs text-muted-foreground font-body mt-0.5">
+            Add a YouTube or Vimeo video to your invite.
+          </p>
+        </div>
+        <div className="p-6">
+          <input
+            type="url"
+            placeholder="https://youtu.be/... or https://vimeo.com/..."
+            value={(formData.videoUrl as string | undefined) ?? ''}
+            onChange={(event) => handleFieldChange('videoUrl', event.target.value || undefined)}
+            className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <p className="text-xs text-muted-foreground font-body mt-1">
+            Guests can watch it directly on the invitation page.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="px-6 pt-6 pb-1">
+          <h3 className="font-display text-base font-semibold">Gifts &amp; Registry</h3>
+          <p className="text-xs text-muted-foreground font-body mt-0.5">
+            Link gift registries or wish lists. Add up to 5 links.
+          </p>
+        </div>
+        <div className="p-6 space-y-3">
+          {((formData.registryLinks as Array<{ title: string; url: string }> | undefined) ?? []).map((link, index) => (
+            <div key={index} className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                placeholder="Label"
+                value={link.title}
+                onChange={(event) => {
+                  const links = [...((formData.registryLinks as Array<{ title: string; url: string }>) ?? [])];
+                  links[index] = { ...links[index], title: event.target.value };
+                  handleFieldChange('registryLinks', links);
+                }}
+                className="flex-1 px-3 py-2.5 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <input
+                type="url"
+                placeholder="URL"
+                value={link.url}
+                onChange={(event) => {
+                  const links = [...((formData.registryLinks as Array<{ title: string; url: string }>) ?? [])];
+                  links[index] = { ...links[index], url: event.target.value };
+                  handleFieldChange('registryLinks', links);
+                }}
+                className="flex-1 px-3 py-2.5 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const links = ((formData.registryLinks as Array<{ title: string; url: string }>) ?? []).filter((_, itemIndex) => itemIndex !== index);
+                  handleFieldChange('registryLinks', links.length > 0 ? links : undefined);
+                }}
+                className="px-2 text-sm text-muted-foreground hover:text-destructive transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          {((formData.registryLinks as Array<unknown> | undefined) ?? []).length < 5 && (
+            <button
+              type="button"
+              onClick={() => {
+                const links = [
+                  ...((formData.registryLinks as Array<{ title: string; url: string }>) ?? []),
+                  { title: '', url: '' },
+                ];
+                handleFieldChange('registryLinks', links);
+              }}
+              className="text-sm font-body text-primary hover:text-primary/80 transition-colors"
+            >
+              + Add Registry
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="px-6 pt-6 pb-1">
+          <h3 className="font-display text-base font-semibold">Travel &amp; Accommodation</h3>
+          <p className="text-xs text-muted-foreground font-body mt-0.5">
+            Suggest nearby hotels or accommodation. Add up to 5 options.
+          </p>
+        </div>
+        <div className="p-6 space-y-4">
+          {((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }> | undefined) ?? []).map((entry, index) => (
+            <div key={index} className="space-y-2 p-4 rounded-lg border border-border bg-muted/20 relative">
+              <button
+                type="button"
+                onClick={() => {
+                  const list = ((formData.accommodations as Array<unknown>) ?? []).filter((_, itemIndex) => itemIndex !== index);
+                  handleFieldChange('accommodations', list.length > 0 ? list : undefined);
+                }}
+                className="absolute top-3 right-3 text-sm text-muted-foreground hover:text-destructive transition-colors"
+              >
+                Remove
+              </button>
+              <input
+                type="text"
+                placeholder="Hotel name *"
+                value={entry.name}
+                onChange={(event) => {
+                  const list = [...((formData.accommodations as Array<typeof entry>) ?? [])];
+                  list[index] = { ...list[index], name: event.target.value };
+                  handleFieldChange('accommodations', list);
+                }}
+                className="w-full px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <input
+                type="text"
+                placeholder="Address *"
+                value={entry.address}
+                onChange={(event) => {
+                  const list = [...((formData.accommodations as Array<typeof entry>) ?? [])];
+                  list[index] = { ...list[index], address: event.target.value };
+                  handleFieldChange('accommodations', list);
+                }}
+                className="w-full px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  type="url"
+                  placeholder="Booking link"
+                  value={entry.link ?? ''}
+                  onChange={(event) => {
+                    const list = [...((formData.accommodations as Array<typeof entry>) ?? [])];
+                    list[index] = { ...list[index], link: event.target.value || undefined };
+                    handleFieldChange('accommodations', list);
+                  }}
+                  className="px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <input
+                  type="text"
+                  placeholder="Group code"
+                  value={entry.groupCode ?? ''}
+                  onChange={(event) => {
+                    const list = [...((formData.accommodations as Array<typeof entry>) ?? [])];
+                    list[index] = { ...list[index], groupCode: event.target.value || undefined };
+                    handleFieldChange('accommodations', list);
+                  }}
+                  className="px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Description"
+                value={entry.description ?? ''}
+                onChange={(event) => {
+                  const list = [...((formData.accommodations as Array<typeof entry>) ?? [])];
+                  list[index] = { ...list[index], description: event.target.value || undefined };
+                  handleFieldChange('accommodations', list);
+                }}
+                className="w-full px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          ))}
+          {((formData.accommodations as Array<unknown> | undefined) ?? []).length < 5 && (
+            <button
+              type="button"
+              onClick={() => {
+                const list = [
+                  ...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? []),
+                  { name: '', address: '' },
+                ];
+                handleFieldChange('accommodations', list);
+              }}
+              className="text-sm font-body text-primary hover:text-primary/80 transition-colors"
+            >
+              + Add Hotel / Accommodation
+            </button>
+          )}
+        </div>
+      </div>
+    </>
+  );
+
+  const renderMediaExtras = currentStep === 2 && (
+    <>
+      {config.fields.some((field) => field.key === 'enableMusic') && (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+          <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-border">
+            <div>
+              <h3 className="font-display text-base font-semibold">Background Music</h3>
+              <p className="text-xs text-muted-foreground font-body mt-0.5">
+                Play soft music when guests open your invite.
+              </p>
+            </div>
+            <Switch checked={!!formData.enableMusic} onCheckedChange={(value) => handleFieldChange('enableMusic', value)} />
+          </div>
+          {formData.enableMusic && (
+            <div className="p-6">
+              <label className="block text-sm font-body font-medium mb-1.5">Select a track</label>
+              <select
+                value={(formData.musicUrl as string | undefined) ?? ''}
+                onChange={(event) => handleFieldChange('musicUrl', event.target.value || undefined)}
+                className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Choose a track...</option>
+                {MUSIC_TRACKS.map((track) => (
+                  <option key={track.url} value={track.url}>{track.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground font-body mt-1">
+                Music starts after the first tap. Guests can mute it anytime.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {enabledSections.includes('rsvp') && (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+          <div className="px-6 pt-6 pb-1">
+            <h3 className="font-display text-base font-semibold">RSVP Options</h3>
+            <p className="text-xs text-muted-foreground font-body mt-0.5">
+              Add meal choices or RSVP extras.
+            </p>
+          </div>
+          <div className="p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-body font-medium mb-1.5">Meal Options</label>
+              <input
+                type="text"
+                placeholder="Vegetarian, Non-Veg, Vegan"
+                value={(formData.mealOptions as string[] | undefined)?.join(', ') ?? ''}
+                onChange={(event) => {
+                  const options = event.target.value
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean);
+                  handleFieldChange('mealOptions', options.length > 0 ? options : undefined);
+                }}
+                className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="text-xs text-muted-foreground font-body mt-1">
+                Separate options with commas. Leave blank to hide the meal field.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  const renderPostEventCard = isPastEvent && (
+    <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-border">
+        <div>
+          <h3 className="font-display text-base font-semibold">Post-Event Mode</h3>
+          <p className="text-xs text-muted-foreground font-body mt-0.5">
+            Switch to a thank-you experience now that the event has passed.
+          </p>
+        </div>
+        <Switch checked={!!formData.postEventMode} onCheckedChange={(value) => handleFieldChange('postEventMode', value)} />
+      </div>
+      {formData.postEventMode && (
+        <div className="p-6">
+          <label className="block text-sm font-body font-medium mb-1.5">Thank-you message</label>
+          <textarea
+            rows={3}
+            placeholder="Thank you for celebrating with us!"
+            value={(formData.thankYouMessage as string | undefined) ?? ''}
+            onChange={(event) => handleFieldChange('thankYouMessage', event.target.value || undefined)}
+            className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+          />
+          <p className="text-xs text-muted-foreground font-body mt-1">
+            This replaces the RSVP form on the live invite after the event.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  const reviewStep = (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex items-start gap-3">
+          <Sparkles className="h-5 w-5 text-primary mt-0.5" />
+          <div>
+            <h3 className="font-display text-xl font-semibold">Final review</h3>
+            <p className="text-sm text-muted-foreground font-body mt-1">
+              The live preview stays available on the side. Use this step to confirm readiness and publish with confidence.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-3 mt-5 sm:grid-cols-3">
+          <div className="rounded-xl border border-border bg-muted/30 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Required fields</p>
+            <p className="mt-2 text-2xl font-semibold">{completedRequiredFields}/{requiredFields.length || 0}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Complete every required field before publishing.</p>
+          </div>
+          <div className="rounded-xl border border-border bg-muted/30 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Invite link</p>
+            <p className="mt-2 text-sm font-medium break-all">{slug ? `/i/${slug}` : 'Not selected yet'}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Set the final guest-facing URL now if it is still empty.</p>
+          </div>
+          <div className="rounded-xl border border-border bg-muted/30 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Enabled sections</p>
+            <p className="mt-2 text-2xl font-semibold">{enabledSections.length}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Only enabled sections will appear on the final invitation.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <h3 className="font-display text-lg font-semibold">Publish checklist</h3>
+          <div className="space-y-3 mt-4">
+            {publishChecks.map((item) => (
+              <div key={item.label} className="flex items-start gap-3 rounded-xl border border-border bg-muted/20 p-3">
+                {item.complete ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
                 )}
+                <div>
+                  <p className="text-sm font-medium text-foreground">{item.label}</p>
+                  <p className="text-xs text-muted-foreground">{item.detail}</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Step Content */}
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <h2 className="font-display text-2xl font-bold">{stepDefs[currentStep].label}</h2>
-
-        {currentStep < 3 ? (
-          <>
-            {renderStepFields()}
-
-            {/* ── Step 2: Venue & Story — built-in panels ── */}
-            {currentStep === 1 && (
-              <>
-                {/* Video embed */}
-                <div className="rounded-xl border border-border bg-card overflow-hidden">
-                  <div className="px-6 pt-6 pb-1">
-                    <h3 className="font-display text-base font-semibold">Video</h3>
-                    <p className="text-xs text-muted-foreground font-body mt-0.5">Add a YouTube or Vimeo video to your invite (optional)</p>
-                  </div>
-                  <div className="p-6">
-                    <input
-                      type="url"
-                      placeholder="https://youtu.be/... or https://vimeo.com/..."
-                      value={(formData.videoUrl as string | undefined) ?? ''}
-                      onChange={e => handleFieldChange('videoUrl', e.target.value || undefined)}
-                      className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                    <p className="text-xs text-muted-foreground font-body mt-1">Paste a YouTube or Vimeo link. Guests can watch it on your invite page.</p>
-                  </div>
-                </div>
-
-                {/* Gifts & Registry */}
-                <div className="rounded-xl border border-border bg-card overflow-hidden">
-                  <div className="px-6 pt-6 pb-1">
-                    <h3 className="font-display text-base font-semibold">Gifts &amp; Registry</h3>
-                    <p className="text-xs text-muted-foreground font-body mt-0.5">Link to gift registries or wish lists (optional, up to 5)</p>
-                  </div>
-                  <div className="p-6 space-y-3">
-                    {((formData.registryLinks as Array<{ title: string; url: string }> | undefined) ?? []).map((link, i) => (
-                      <div key={i} className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Label (e.g. Amazon Wishlist)"
-                          value={link.title}
-                          onChange={e => {
-                            const links = [...((formData.registryLinks as Array<{ title: string; url: string }>) ?? [])];
-                            links[i] = { ...links[i], title: e.target.value };
-                            handleFieldChange('registryLinks', links);
-                          }}
-                          className="flex-1 px-3 py-2.5 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                        <input
-                          type="url"
-                          placeholder="URL"
-                          value={link.url}
-                          onChange={e => {
-                            const links = [...((formData.registryLinks as Array<{ title: string; url: string }>) ?? [])];
-                            links[i] = { ...links[i], url: e.target.value };
-                            handleFieldChange('registryLinks', links);
-                          }}
-                          className="flex-1 px-3 py-2.5 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const links = ((formData.registryLinks as Array<{ title: string; url: string }>) ?? []).filter((_, j) => j !== i);
-                            handleFieldChange('registryLinks', links.length > 0 ? links : undefined);
-                          }}
-                          className="px-2 text-muted-foreground hover:text-destructive transition-colors font-body"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                    {((formData.registryLinks as Array<unknown> | undefined) ?? []).length < 5 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const links = [...((formData.registryLinks as Array<{ title: string; url: string }>) ?? []), { title: '', url: '' }];
-                          handleFieldChange('registryLinks', links);
-                        }}
-                        className="text-sm font-body text-primary hover:text-primary/80 transition-colors"
-                      >
-                        + Add Registry
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Travel & Accommodation */}
-                <div className="rounded-xl border border-border bg-card overflow-hidden">
-                  <div className="px-6 pt-6 pb-1">
-                    <h3 className="font-display text-base font-semibold">Travel &amp; Accommodation</h3>
-                    <p className="text-xs text-muted-foreground font-body mt-0.5">Suggest hotels or accommodation near the venue (optional, up to 5)</p>
-                  </div>
-                  <div className="p-6 space-y-4">
-                    {((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }> | undefined) ?? []).map((entry, i) => (
-                      <div key={i} className="space-y-2 p-4 rounded-lg border border-border bg-muted/20 relative">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const list = ((formData.accommodations as Array<unknown>) ?? []).filter((_, j) => j !== i);
-                            handleFieldChange('accommodations', list.length > 0 ? list : undefined);
-                          }}
-                          className="absolute top-3 right-3 text-muted-foreground hover:text-destructive transition-colors font-body text-lg leading-none"
-                        >
-                          ×
-                        </button>
-                        <input type="text" placeholder="Hotel name *" value={entry.name}
-                          onChange={e => { const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? [])]; list[i] = { ...list[i], name: e.target.value }; handleFieldChange('accommodations', list); }}
-                          className="w-full px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                        <input type="text" placeholder="Address *" value={entry.address}
-                          onChange={e => { const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? [])]; list[i] = { ...list[i], address: e.target.value }; handleFieldChange('accommodations', list); }}
-                          className="w-full px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                        <div className="grid grid-cols-2 gap-2">
-                          <input type="url" placeholder="Booking link (optional)" value={entry.link ?? ''}
-                            onChange={e => { const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? [])]; list[i] = { ...list[i], link: e.target.value || undefined }; handleFieldChange('accommodations', list); }}
-                            className="px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                          <input type="text" placeholder="Group code (optional)" value={entry.groupCode ?? ''}
-                            onChange={e => { const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? [])]; list[i] = { ...list[i], groupCode: e.target.value || undefined }; handleFieldChange('accommodations', list); }}
-                            className="px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                        </div>
-                        <input type="text" placeholder="Description (optional)" value={entry.description ?? ''}
-                          onChange={e => { const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? [])]; list[i] = { ...list[i], description: e.target.value || undefined }; handleFieldChange('accommodations', list); }}
-                          className="w-full px-3 py-2 border border-border rounded-lg bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                      </div>
-                    ))}
-                    {((formData.accommodations as Array<unknown> | undefined) ?? []).length < 5 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const list = [...((formData.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>) ?? []), { name: '', address: '' }];
-                          handleFieldChange('accommodations', list);
-                        }}
-                        className="text-sm font-body text-primary hover:text-primary/80 transition-colors"
-                      >
-                        + Add Hotel / Accommodation
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* ── Step 3: Media & Schedule — built-in panels ── */}
-            {currentStep === 2 && (
-              <>
-                {/* Background Music — only for templates that have the enableMusic field */}
-                {config.fields.some(f => f.key === 'enableMusic') && (
-                  <div className="rounded-xl border border-border bg-card overflow-hidden">
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                      <div>
-                        <h3 className="font-display text-base font-semibold">Background Music</h3>
-                        <p className="text-xs text-muted-foreground font-body mt-0.5">Play soft music when guests open your invite</p>
-                      </div>
-                      <Switch
-                        checked={!!(formData.enableMusic)}
-                        onCheckedChange={v => handleFieldChange('enableMusic', v)}
-                      />
-                    </div>
-                    {formData.enableMusic && (
-                      <div className="p-6">
-                        <label className="block text-sm font-body font-medium mb-1.5">Select a track</label>
-                        <select
-                          value={(formData.musicUrl as string | undefined) ?? ''}
-                          onChange={e => handleFieldChange('musicUrl', e.target.value || undefined)}
-                          className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        >
-                          <option value="">Choose a track…</option>
-                          {MUSIC_TRACKS.map(t => (
-                            <option key={t.url} value={t.url}>{t.name}</option>
-                          ))}
-                        </select>
-                        <p className="text-xs text-muted-foreground font-body mt-1">Music plays after the first tap — guests can mute it anytime.</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* RSVP Options */}
-                {enabledSections.includes('rsvp') && (
-                  <div className="rounded-xl border border-border bg-card overflow-hidden">
-                    <div className="px-6 pt-6 pb-1">
-                      <h3 className="font-display text-base font-semibold">RSVP Options</h3>
-                      <p className="text-xs text-muted-foreground font-body mt-0.5">Optional extras for your RSVP form</p>
-                    </div>
-                    <div className="p-6 space-y-4">
-                      <div>
-                        <label className="block text-sm font-body font-medium mb-1.5">Meal Options</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Vegetarian, Non-Veg, Vegan"
-                          value={(formData.mealOptions as string[] | undefined)?.join(', ') ?? ''}
-                          onChange={e => {
-                            const opts = e.target.value
-                              .split(',')
-                              .map(s => s.trim())
-                              .filter(Boolean);
-                            handleFieldChange('mealOptions', opts.length > 0 ? opts : undefined);
-                          }}
-                          className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                        <p className="text-xs text-muted-foreground font-body mt-1">Separate options with commas. Leave blank to hide the meal field.</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </>
-        ) : (
-          /* Step 4: Review & Publish */
-          <div className="space-y-6">
-            {/* Preview toggle */}
-            <div className="flex items-center gap-3 mb-4">
-              <button
-                onClick={() => setPreviewMode('mobile')}
-                className={`px-4 py-2 rounded-lg text-sm font-body transition-colors ${previewMode === 'mobile' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
-              >
-                📱 Mobile
-              </button>
-              <button
-                onClick={() => setPreviewMode('desktop')}
-                className={`px-4 py-2 rounded-lg text-sm font-body transition-colors ${previewMode === 'desktop' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
-              >
-                🖥️ Desktop
-              </button>
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <h3 className="font-display text-lg font-semibold">What happens after publish</h3>
+          <div className="space-y-3 mt-4">
+            <div className="rounded-xl border border-border bg-muted/20 p-3">
+              <p className="text-sm font-medium text-foreground">1. Guests open your custom link</p>
+              <p className="text-xs text-muted-foreground mt-1">The live invite uses the same content you are previewing here.</p>
             </div>
-
-            {/* Live Preview */}
-            <div className="rounded-xl border border-border bg-muted overflow-hidden">
-              {previewMode === 'mobile' ? (
-                <div className="flex justify-center py-8">
-                  <PhoneMockup>
-                    <div className="h-[600px] overflow-y-auto">
-                      <Suspense fallback={<div className="min-h-[400px] flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-                        <TemplateRenderer config={effectiveConfig} data={previewData} isPreview />
-                      </Suspense>
-                    </div>
-                  </PhoneMockup>
-                </div>
-              ) : (
-                <div className="max-h-[600px] overflow-y-auto">
-                  <Suspense fallback={<div className="min-h-[400px] flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-                    <TemplateRenderer config={effectiveConfig} data={previewData} isPreview />
-                  </Suspense>
-                </div>
-              )}
+            <div className="rounded-xl border border-border bg-muted/20 p-3">
+              <p className="text-sm font-medium text-foreground">2. RSVP and media sections appear automatically</p>
+              <p className="text-xs text-muted-foreground mt-1">Only the sections you enabled remain visible to guests.</p>
             </div>
-
-            {/* Slug Picker */}
-            <div className="rounded-xl border border-border bg-card p-6">
-              <h3 className="font-display text-lg font-semibold mb-5">Shareable Link</h3>
-              <SlugPicker value={slug} onChange={setSlug} suggestion={slugSuggestion} />
+            <div className="rounded-xl border border-border bg-muted/20 p-3">
+              <p className="text-sm font-medium text-foreground">3. You can return to edit later</p>
+              <p className="text-xs text-muted-foreground mt-1">Future updates will publish to the same shareable link.</p>
             </div>
-
-            {/* Post-Event Mode — shown when editing a past event */}
-            {isEditing && (() => {
-              const eventDateStr = (formData.eventDate ?? formData.weddingDate ?? formData.partyDate ?? '') as string;
-              const isPast = eventDateStr && eventDateStr < new Date().toISOString().split('T')[0];
-              if (!isPast) return null;
-              return (
-                <div className="rounded-xl border border-border bg-card overflow-hidden">
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                    <div>
-                      <h3 className="font-display text-base font-semibold">Post-Event Mode</h3>
-                      <p className="text-xs text-muted-foreground font-body mt-0.5">
-                        Your event has passed — switch to a thank-you page for guests
-                      </p>
-                    </div>
-                    <Switch
-                      checked={!!(formData.postEventMode)}
-                      onCheckedChange={v => handleFieldChange('postEventMode', v)}
-                    />
-                  </div>
-                  {formData.postEventMode && (
-                    <div className="p-6">
-                      <label className="block text-sm font-body font-medium mb-1.5">Thank-you message</label>
-                      <textarea
-                        rows={3}
-                        placeholder="Thank you for celebrating with us!"
-                        value={(formData.thankYouMessage as string | undefined) ?? ''}
-                        onChange={e => handleFieldChange('thankYouMessage', e.target.value || undefined)}
-                        className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                      />
-                      <p className="text-xs text-muted-foreground font-body mt-1">
-                        Shown to guests instead of the RSVP form. The RSVP section is hidden automatically.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
           </div>
-        )}
-
-        {/* Navigation buttons */}
-        <div className="flex flex-col sm:flex-row gap-3 pb-8">
-          {currentStep > 0 && (
-            <Button variant="outline" onClick={handlePrev} className="flex-1 font-body">
-              ← Previous
-            </Button>
-          )}
-          <Button variant="outline" onClick={handleSaveDraft} disabled={saving} className="flex-1 font-body">
-            {saving ? 'Saving...' : 'Save Draft'}
-          </Button>
-          {currentStep < 3 ? (
-            <Button onClick={handleNext} className="flex-1 font-body">
-              Next →
-            </Button>
-          ) : (
-            <Button onClick={handlePublish} disabled={publishing} className="flex-1 font-body">
-              {publishing ? 'Publishing...' : isEditing ? 'Update & Publish' : 'Publish Invite'}
-            </Button>
-          )}
         </div>
       </div>
 
-      {/* Publish confirmation modal */}
+      {renderPostEventCard}
+    </div>
+  );
+
+  const sidebarContent = (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Progress</p>
+            <h3 className="font-display text-lg font-semibold mt-2">{completionPercent}% ready to publish</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Keep editing while the preview updates automatically.
+            </p>
+          </div>
+          <Badge variant={saveStatusVariant} className="shrink-0">{saveStatusLabel}</Badge>
+        </div>
+        <div className="mt-4 h-2 rounded-full bg-muted overflow-hidden">
+          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${completionPercent}%` }} />
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          {completedRequiredFields} of {requiredFields.length || 0} required fields completed.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-display text-lg font-semibold">Live Preview</h3>
+            <p className="text-sm text-muted-foreground">Switch between mobile and desktop anytime.</p>
+          </div>
+          <Eye className="h-5 w-5 text-muted-foreground mt-1" />
+        </div>
+
+        <div className="inline-flex rounded-xl border border-border bg-muted p-1 mb-4">
+          <button
+            type="button"
+            onClick={() => setPreviewMode('mobile')}
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+              previewMode === 'mobile' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+            }`}
+          >
+            <Smartphone className="h-4 w-4" />
+            Mobile
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreviewMode('desktop')}
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+              previewMode === 'desktop' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+            }`}
+          >
+            <Laptop className="h-4 w-4" />
+            Desktop
+          </button>
+        </div>
+
+        {previewContent}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <div className="flex items-start gap-3 mb-4">
+          <Link2 className="h-5 w-5 text-muted-foreground mt-0.5" />
+          <div>
+            <h3 className="font-display text-lg font-semibold">Shareable Link</h3>
+            <p className="text-sm text-muted-foreground">
+              Choose the final guest URL early so you can review it while editing.
+            </p>
+          </div>
+        </div>
+        <SlugPicker value={slug} onChange={handleSlugChange} suggestion={slugSuggestion} />
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <h3 className="font-display text-lg font-semibold">Readiness</h3>
+        <div className="space-y-3 mt-4">
+          {publishChecks.map((item) => (
+            <div key={item.label} className="flex items-start gap-3">
+              {item.complete ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+              ) : (
+                <Clock3 className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+              )}
+              <div>
+                <p className="text-sm font-medium text-foreground">{item.label}</p>
+                <p className="text-xs text-muted-foreground">{item.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-background">
+      <div className="border-b border-border bg-card/85 backdrop-blur-sm sticky top-16 z-40">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Invite Builder</p>
+              <h2 className="font-display text-2xl font-bold mt-1">{stepDefs[currentStep].label}</h2>
+              <p className="text-sm text-muted-foreground mt-1">{stepDefs[currentStep].description}</p>
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {stepDefs.map((step, index) => (
+                <div key={step.key} className="flex items-center gap-2">
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                    index < currentStep
+                      ? 'bg-primary text-primary-foreground'
+                      : index === currentStep
+                        ? 'bg-primary text-primary-foreground ring-2 ring-primary/25 ring-offset-2 ring-offset-background'
+                        : 'bg-muted text-muted-foreground'
+                  }`}>
+                    {index < currentStep ? 'OK' : index + 1}
+                  </div>
+                  <span className={`hidden text-sm sm:inline ${
+                    index <= currentStep ? 'text-foreground font-medium' : 'text-muted-foreground'
+                  }`}>
+                    {step.label}
+                  </span>
+                  {index < stepDefs.length - 1 && <div className={`h-px w-8 ${index < currentStep ? 'bg-primary' : 'bg-border'}`} />}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 py-6 lg:py-8">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="min-w-0 space-y-6">
+            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current step</p>
+                  <h3 className="font-display text-xl font-semibold mt-2">{stepDefs[currentStep].label}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">{stepDefs[currentStep].description}</p>
+                </div>
+                <Badge variant={saveStatusVariant}>{saveStatusLabel}</Badge>
+              </div>
+            </div>
+
+            <div className="lg:hidden rounded-2xl border border-border bg-card p-4 shadow-sm space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-display text-lg font-semibold">Preview and Link</h3>
+                  <p className="text-sm text-muted-foreground">Open the preview anytime and set the final guest URL early.</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setPreviewSheetOpen(true)}>
+                  Preview
+                </Button>
+              </div>
+              <SlugPicker value={slug} onChange={handleSlugChange} suggestion={slugSuggestion} />
+            </div>
+
+            {currentStep < stepDefs.length - 1 ? (
+              <div className="space-y-6">
+                {renderStepFields()}
+                {renderVenueExtras}
+                {renderMediaExtras}
+              </div>
+            ) : (
+              reviewStep
+            )}
+
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                {currentStep > 0 && (
+                  <Button variant="outline" onClick={handlePrev} className="flex-1 font-body">
+                    Previous
+                  </Button>
+                )}
+                <Button variant="outline" onClick={handleSaveDraft} disabled={saving} className="flex-1 font-body">
+                  {saving ? 'Saving...' : 'Save Draft'}
+                </Button>
+                {currentStep < stepDefs.length - 1 ? (
+                  <Button onClick={handleNext} className="flex-1 font-body">
+                    Continue
+                  </Button>
+                ) : (
+                  <Button onClick={handlePublish} disabled={publishing} className="flex-1 font-body">
+                    {publishing ? 'Publishing...' : isEditing ? 'Update & Publish' : 'Publish Invite'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <aside className="hidden lg:block">
+            <div className="sticky top-28">
+              {sidebarContent}
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <div className="fixed bottom-4 right-4 z-40 lg:hidden">
+        <Button onClick={() => setPreviewSheetOpen(true)} className="rounded-full shadow-lg">
+          Preview Invite
+        </Button>
+      </div>
+
+      <Sheet open={previewSheetOpen} onOpenChange={setPreviewSheetOpen}>
+        <SheetContent side="right" className="w-full max-w-[560px] overflow-y-auto">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Preview and publishing tools</SheetTitle>
+          </SheetHeader>
+          {sidebarContent}
+        </SheetContent>
+      </Sheet>
+
       {showPublishConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/50 backdrop-blur-sm px-4">
-          <div className="bg-card rounded-xl border border-border p-6 max-w-sm w-full shadow-xl animate-scale-in">
-            <div className="text-3xl text-center mb-3">🚀</div>
-            <h3 className="font-display text-lg font-semibold mb-2 text-center">
-              {isEditing ? 'Update & Publish' : 'Publish Invite'}
-            </h3>
-            <p className="text-sm text-muted-foreground font-body mb-2 text-center">
-              {isEditing ? 'Your changes will go live immediately.' : 'Your invite will be live at:'}
-            </p>
-            {!isEditing && slug && (
-              <p className="text-xs text-gold font-body font-medium text-center mb-4 break-all">{window.location.host}/i/{slug}</p>
-            )}
-            <div className="flex gap-3 mt-4">
-              <Button variant="outline" className="flex-1 font-body" onClick={() => setShowPublishConfirm(false)}>Cancel</Button>
-              <Button className="flex-1 font-body" onClick={confirmPublish} disabled={publishing}>{publishing ? 'Publishing...' : 'Confirm & Publish'}</Button>
+          <div className="bg-card rounded-2xl border border-border p-6 max-w-sm w-full shadow-xl animate-scale-in">
+            <div className="text-center mb-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Final confirmation</p>
+              <h3 className="font-display text-lg font-semibold mt-2">
+                {isEditing ? 'Update and publish changes' : 'Publish invite'}
+              </h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                {isEditing ? 'Your latest edits will go live immediately.' : 'Your invite will be published at the custom URL below.'}
+              </p>
+              {!isEditing && slug && (
+                <p className="text-sm font-medium text-foreground mt-3 break-all">{window.location.host}/i/{slug}</p>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 font-body" onClick={() => setShowPublishConfirm(false)}>
+                Cancel
+              </Button>
+              <Button className="flex-1 font-body" onClick={confirmPublish} disabled={publishing}>
+                {publishing ? 'Publishing...' : 'Confirm & Publish'}
+              </Button>
             </div>
           </div>
         </div>

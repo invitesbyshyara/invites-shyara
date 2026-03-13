@@ -537,3 +537,64 @@ export const sendAnnouncementBulk = async (
     }
   }
 };
+
+export const sendCollaboratorInviteEmail = async (
+  email: string,
+  opts: {
+    inviterName: string;
+    eventName: string;
+    roleLabel: string;
+    permissions: string[];
+    dashboardUrl: string;
+  },
+) => {
+  const body = `
+    <h2 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',Times,serif;font-size:22px;font-weight:700;color:#1C1917;line-height:1.3;">
+      You have been invited to collaborate
+    </h2>
+    <p style="margin:0 0 12px;">
+      <strong>${DOMPurify.sanitize(opts.inviterName)}</strong> invited you to help manage
+      <strong>${DOMPurify.sanitize(opts.eventName)}</strong> on Shyara.
+    </p>
+    ${badge(`Role: ${DOMPurify.sanitize(opts.roleLabel)}`, "#8B5CF6", "#F5F3FF")}
+    <p style="margin:0 0 16px;">Permissions included:</p>
+    <ul style="margin:0 0 20px 18px;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#44403C;">
+      ${opts.permissions.map((permission) => `<li>${DOMPurify.sanitize(permission.replace(/_/g, " "))}</li>`).join("")}
+    </ul>
+    ${btn(opts.dashboardUrl, "Open Workspace ->")}
+    <p style="margin:20px 0 0;font-size:13px;color:#78716C;">
+      Sign in with this email address to access the workspace immediately.
+    </p>`;
+
+  await send(email, `Workspace invite for ${DOMPurify.sanitize(opts.eventName)}`, buildEmail(body));
+};
+
+export const sendGuestBroadcastEmail = async (
+  email: string,
+  opts: {
+    subject: string;
+    title: string;
+    content: string;
+    ctaLabel?: string;
+    ctaUrl?: string;
+    trackingPixelUrl?: string;
+    unsubscribeToken?: string;
+  },
+) => {
+  const safeTitle = DOMPurify.sanitize(opts.title);
+  const safeContent = DOMPurify.sanitize(opts.content.replace(/\n/g, "<br />"), {
+    ALLOWED_TAGS: ["p", "br", "strong", "em", "ul", "ol", "li", "a", "h2", "h3"],
+    ALLOWED_ATTR: ["href"],
+  });
+  const unsubscribeUrl = opts.unsubscribeToken
+    ? `${env.FRONTEND_URL}/unsubscribe?token=${opts.unsubscribeToken}`
+    : undefined;
+
+  const body = `
+    <h2 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',Times,serif;font-size:22px;font-weight:700;color:#1C1917;line-height:1.3;">${safeTitle}</h2>
+    <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#44403C;">${safeContent}</div>
+    ${opts.ctaUrl && opts.ctaLabel ? btn(opts.ctaUrl, DOMPurify.sanitize(opts.ctaLabel)) : ""}
+    ${opts.trackingPixelUrl ? `<img src="${DOMPurify.sanitize(opts.trackingPixelUrl)}" alt="" width="1" height="1" style="display:block;border:0;width:1px;height:1px;" />` : ""}`;
+
+  await send(email, DOMPurify.sanitize(opts.subject), buildEmail(body, unsubscribeUrl));
+};

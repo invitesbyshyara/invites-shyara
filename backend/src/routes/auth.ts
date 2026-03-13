@@ -7,6 +7,7 @@ import { generateRefreshToken, hashRefreshToken, signAccessToken } from "../lib/
 import { verifyToken } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { sendPasswordResetOtpEmail, sendWelcomeEmail } from "../services/email";
+import { activateCollaboratorInvitations } from "../services/inviteOps";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 
 const router = Router();
@@ -106,6 +107,7 @@ router.post(
 
     const { accessToken, refreshToken } = await issueSession(user.id);
     setRefreshCookie(res, refreshToken);
+    await activateCollaboratorInvitations(user.email, user.id, user.name);
     await sendWelcomeEmail(user.name, user.email);
 
     return sendSuccess(res, { user: sanitizeUser(user), accessToken }, undefined, 201);
@@ -143,6 +145,7 @@ router.post(
 
     const { accessToken, refreshToken } = await issueSession(user.id);
     setRefreshCookie(res, refreshToken);
+    await activateCollaboratorInvitations(user.email, user.id, user.name);
 
     const profile = await prisma.user.findUniqueOrThrow({
       where: { id: user.id },
@@ -224,6 +227,7 @@ router.post(
 
     const { accessToken, refreshToken } = await issueSession(user.id);
     setRefreshCookie(res, refreshToken);
+    await activateCollaboratorInvitations(user.email, user.id, user.name);
 
     const profile = await prisma.user.findUniqueOrThrow({
       where: { id: user.id },

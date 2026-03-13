@@ -15,6 +15,7 @@ const Login = () => {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const next = searchParams.get('next');
+  const continuingCheckout = next?.startsWith('/checkout/');
 
   const handleRedirect = () => {
     if (pendingTemplateSlug) {
@@ -47,7 +48,9 @@ const Login = () => {
         <div className="text-center mb-8">
           <Link to="/" className="font-display text-2xl font-bold text-foreground">Shyara</Link>
           <h1 className="font-display text-3xl font-bold mt-6 mb-2">Welcome back</h1>
-          <p className="text-muted-foreground font-body text-sm">Sign in to manage your invitations</p>
+          <p className="text-muted-foreground font-body text-sm">
+            {continuingCheckout ? 'Sign in to continue your template purchase' : 'Sign in to manage your invitations'}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

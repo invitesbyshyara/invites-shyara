@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -99,6 +99,10 @@ function DataTable<T>({
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / perPage));
   const pageData = filteredData.slice(page * perPage, (page + 1) * perPage);
+
+  useEffect(() => {
+    setPage((previous) => Math.min(previous, totalPages - 1));
+  }, [totalPages]);
 
   const toggleSort = (key: string) => {
     if (sortKey === key) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }

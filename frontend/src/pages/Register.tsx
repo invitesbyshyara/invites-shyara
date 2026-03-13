@@ -17,6 +17,7 @@ const Register = () => {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const next = searchParams.get('next');
+  const continuingCheckout = next?.startsWith('/checkout/');
 
   const handleRedirect = () => {
     if (pendingTemplateSlug) {
@@ -53,7 +54,9 @@ const Register = () => {
         <div className="text-center mb-8">
           <Link to="/" className="font-display text-2xl font-bold text-foreground">Shyara</Link>
           <h1 className="font-display text-3xl font-bold mt-6 mb-2">Create your account</h1>
-          <p className="text-muted-foreground font-body text-sm">Start creating beautiful invitations</p>
+          <p className="text-muted-foreground font-body text-sm">
+            {continuingCheckout ? 'Create your account to continue your template purchase' : 'Start creating beautiful invitations'}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

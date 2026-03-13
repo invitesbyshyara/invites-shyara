@@ -188,14 +188,14 @@ const Account = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-body font-medium">Email on new RSVP</p>
-              <p className="text-xs text-muted-foreground font-body">Get notified when a guest responds</p>
+              <p className="text-xs text-muted-foreground font-body">Get notified when a guest responds. This preference is saved on this device.</p>
             </div>
             <Switch checked={notifRsvp} onCheckedChange={handleNotifRsvp} />
           </div>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-body font-medium">Weekly summary</p>
-              <p className="text-xs text-muted-foreground font-body">Receive a weekly digest of activity</p>
+              <p className="text-xs text-muted-foreground font-body">Receive a weekly digest of activity. This preference is saved on this device.</p>
             </div>
             <Switch checked={notifWeekly} onCheckedChange={handleNotifWeekly} />
           </div>
