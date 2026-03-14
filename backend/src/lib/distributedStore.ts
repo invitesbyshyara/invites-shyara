@@ -9,10 +9,14 @@ type MemoryEntry = {
 const memoryStore = new Map<string, MemoryEntry>();
 
 const isSharedStoreConfigured = Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
-const isDevelopmentFallback = !isSharedStoreConfigured && env.NODE_ENV !== "production";
+const isDevelopmentFallback = !isSharedStoreConfigured;
 
 if (!isSharedStoreConfigured && env.NODE_ENV === "production") {
-  throw new Error("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required in production.");
+  logger.warn(
+    "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are not set. " +
+    "Falling back to in-memory store — rate limits and token blacklist will NOT persist across restarts. " +
+    "Add these environment variables in Render to enable distributed state."
+  );
 }
 
 const cleanupMemoryKey = (key: string) => {
