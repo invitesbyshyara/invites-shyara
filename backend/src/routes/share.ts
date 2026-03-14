@@ -138,7 +138,6 @@ router.get("/:slug", async (req, res) => {
     <br /><br />
     <a href="${esc(spaUrl)}" style="color:#c06090">Click here if you are not redirected</a>
   </p>
-  <script>window.location.replace(${JSON.stringify(spaUrl)});</script>
 </body>
 </html>`;
 

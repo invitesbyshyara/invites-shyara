@@ -2,6 +2,7 @@ import { Router } from "express";
 import { EventCategory } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma";
+import { sanitizePlainText, sanitizeTextList } from "../../lib/sanitize";
 import { requirePermission, verifyAdminToken } from "../../middleware/adminAuth";
 import { validate } from "../../middleware/validate";
 import { AppError, asyncHandler, sendSuccess } from "../../utils/http";
@@ -45,10 +46,10 @@ router.post(
   asyncHandler(async (req, res) => {
     const template = await prisma.template.create({
       data: {
-        slug: req.body.slug,
-        name: req.body.name,
+        slug: sanitizePlainText(req.body.slug, { maxLength: 80 }),
+        name: sanitizePlainText(req.body.name, { maxLength: 120 }),
         category: req.body.category,
-        tags: req.body.tags,
+        tags: sanitizeTextList(req.body.tags, 10, 40),
         isPremium: req.body.isPremium,
         price: req.body.price ?? 0,
         priceUsd: req.body.priceUsd,
@@ -97,7 +98,7 @@ router.put(
     const updated = await prisma.template.update({
       where: { slug: req.params.slug },
       data: {
-        ...(req.body.name !== undefined ? { name: req.body.name } : {}),
+        ...(req.body.name !== undefined ? { name: sanitizePlainText(req.body.name, { maxLength: 120 }) } : {}),
         ...(req.body.isPremium !== undefined ? { isPremium: req.body.isPremium } : {}),
         ...(req.body.price !== undefined ? { price: req.body.price } : {}),
         ...(req.body.priceUsd !== undefined ? { priceUsd: req.body.priceUsd } : {}),

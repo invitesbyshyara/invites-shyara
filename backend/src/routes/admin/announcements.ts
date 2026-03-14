@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { logAudit } from "../../lib/audit";
 import { prisma } from "../../lib/prisma";
+import { sanitizePlainText } from "../../lib/sanitize";
 import { requirePermission, verifyAdminToken } from "../../middleware/adminAuth";
 import { validate } from "../../middleware/validate";
 import { sendAnnouncementBulk } from "../../services/email";
@@ -41,7 +42,9 @@ router.post(
   requirePermission("send_announcement"),
   validate({ body: createAnnouncementSchema }),
   asyncHandler(async (req, res) => {
-    const { title, content, sentTo } = req.body;
+    const title = sanitizePlainText(req.body.title, { maxLength: 150 });
+    const content = sanitizePlainText(req.body.content, { maxLength: 10_000 });
+    const { sentTo } = req.body;
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 

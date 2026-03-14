@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma";
+import { sanitizeEmail, sanitizePlainText } from "../../lib/sanitize";
 import { requirePermission, verifyAdminToken } from "../../middleware/adminAuth";
 import { validate } from "../../middleware/validate";
 import { AppError, asyncHandler, sendSuccess } from "../../utils/http";
@@ -22,11 +23,12 @@ router.post(
   validate({ body: createAdminSchema }),
   asyncHandler(async (req, res) => {
     const passwordHash = await bcrypt.hash(req.body.password, 12);
+    const email = sanitizeEmail(req.body.email);
 
     const created = await prisma.adminUser.create({
       data: {
-        name: req.body.name,
-        email: req.body.email.toLowerCase(),
+        name: sanitizePlainText(req.body.name, { maxLength: 100 }),
+        email,
         passwordHash,
         role: req.body.role,
       },

@@ -23,6 +23,7 @@ const TemplatePreview = lazy(() => import("./pages/TemplatePreview"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const CreateInvite = lazy(() => import("./pages/CreateInvite"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -53,6 +54,7 @@ const AdminCategories = lazy(() => import("./admin/pages/Categories"));
 const AdminPromoCodes = lazy(() => import("./admin/pages/PromoCodes"));
 const AdminAnnouncements = lazy(() => import("./admin/pages/Announcements"));
 const AdminSettings = lazy(() => import("./admin/pages/Settings"));
+const AdminSecurityEvents = lazy(() => import("./admin/pages/SecurityEvents"));
 
 const queryClient = new QueryClient();
 
@@ -118,6 +120,7 @@ const App = () => (
                       <Route path="/login" element={<Login />} />
                       <Route path="/register" element={<Register />} />
                       <Route path="/forgot-password" element={<ForgotPassword />} />
+                      <Route path="/verify-email" element={<VerifyEmail />} />
 
                       {/* Authenticated pages */}
                       <Route path="/checkout/:slug" element={<Checkout />} />
@@ -149,6 +152,7 @@ const App = () => (
                       <Route path="/admin/promo-codes" element={<AdminAuthProvider><AdminPromoCodes /></AdminAuthProvider>} />
                       <Route path="/admin/announcements" element={<AdminAuthProvider><AdminAnnouncements /></AdminAuthProvider>} />
                       <Route path="/admin/settings" element={<AdminAuthProvider><AdminSettings /></AdminAuthProvider>} />
+                      <Route path="/admin/security-events" element={<AdminAuthProvider><AdminSecurityEvents /></AdminAuthProvider>} />
 
                       {/* Catch-all */}
                       <Route path="*" element={<NotFound />} />

@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 import {
   LayoutDashboard, Users, FileText, Palette, CreditCard, FolderTree,
-  Tag, Megaphone, Settings, LogOut,
+  Tag, Megaphone, Settings, LogOut, ShieldAlert,
 } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import {
@@ -41,6 +41,9 @@ const sections: NavSection[] = [
     { label: 'Promo Codes', to: '/admin/promo-codes', icon: Tag, permission: 'manage_promo_codes' },
     { label: 'Announcements', to: '/admin/announcements', icon: Megaphone },
     { label: 'Settings', to: '/admin/settings', icon: Settings, permission: 'manage_settings' },
+  ]},
+  { title: 'Security', items: [
+    { label: 'Security Events', to: '/admin/security-events', icon: ShieldAlert, permission: 'manage_settings' },
   ]},
 ];
 
@@ -119,7 +122,7 @@ const AdminSidebar: React.FC = () => {
             </div>
           </div>
         )}
-        <SidebarMenuButton onClick={logout} tooltip="Sign out" className="text-xs" style={{ color: 'hsl(220 10% 55%)' }}>
+        <SidebarMenuButton onClick={() => void logout()} tooltip="Sign out" className="text-xs" style={{ color: 'hsl(220 10% 55%)' }}>
           <LogOut className="h-3.5 w-3.5" />
           <span>Sign out</span>
         </SidebarMenuButton>

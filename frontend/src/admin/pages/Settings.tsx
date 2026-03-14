@@ -36,7 +36,9 @@ const Settings: React.FC = () => {
     setSaving(true);
     try {
       await adminApi.updateSettings(settings);
-      setInitialSettings(JSON.parse(JSON.stringify(settings)));
+      const refreshed = await adminApi.getSettings();
+      setSettings(refreshed);
+      setInitialSettings(JSON.parse(JSON.stringify(refreshed)));
       toast({ title: 'Settings saved' });
     } catch { toast({ title: 'Failed', variant: 'destructive' }); }
     finally { setSaving(false); }

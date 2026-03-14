@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma";
+import { sanitizePlainText } from "../../lib/sanitize";
 import { verifyAdminToken } from "../../middleware/adminAuth";
 import { validate } from "../../middleware/validate";
 import { asyncHandler, sendSuccess } from "../../utils/http";
@@ -54,7 +55,7 @@ router.post(
       data: {
         entityId: req.body.entityId,
         entityType: req.body.entityType,
-        note: req.body.note,
+        note: sanitizePlainText(req.body.note, { maxLength: 2_000 }),
         createdById: req.admin!.id,
       },
       include: {

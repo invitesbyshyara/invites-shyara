@@ -3,6 +3,7 @@ import { Prisma, TransactionStatus } from "@prisma/client";
 import { z } from "zod";
 import { logAudit } from "../../lib/audit";
 import { prisma } from "../../lib/prisma";
+import { sanitizePlainText } from "../../lib/sanitize";
 import { requirePermission, verifyAdminToken } from "../../middleware/adminAuth";
 import { validate } from "../../middleware/validate";
 import { createRazorpayRefund } from "../../services/payment";
@@ -79,6 +80,7 @@ router.post(
   requirePermission("refund"),
   validate({ params: z.object({ id: z.string().min(1) }), body: refundSchema }),
   asyncHandler(async (req, res) => {
+    const reason = sanitizePlainText(req.body.reason, { maxLength: 500 });
     const transaction = await prisma.transaction.findUnique({
       where: { id: req.params.id },
     });
@@ -102,7 +104,7 @@ router.post(
       data: {
         status: "refunded",
         refundedAt: new Date(),
-        refundReason: req.body.reason,
+        refundReason: reason,
       },
     });
 
@@ -111,7 +113,7 @@ router.post(
       action: "PROCESS_REFUND",
       entityType: "transaction",
       entityId: updated.id,
-      details: { reason: req.body.reason, razorpayPaymentId: transaction.razorpayPaymentId },
+      details: { reason, razorpayPaymentId: transaction.razorpayPaymentId },
     });
 
     return sendSuccess(res, updated);

@@ -2,8 +2,11 @@ import { Router } from "express";
 import { Prisma, RsvpResponse } from "@prisma/client";
 import { z } from "zod";
 import { env } from "../lib/env";
+import { createAiLocalizationRateLimit, createAiWriteRateLimit } from "../middleware/aiRateLimit";
 import { prisma } from "../lib/prisma";
+import { buildCanonicalApiUrl } from "../lib/apiPaths";
 import { verifyToken } from "../middleware/auth";
+import { sanitizeEmail, sanitizeOptionalText, sanitizePlainText, sanitizeTextList } from "../lib/sanitize";
 import { sendCollaboratorInviteEmail, sendGuestBroadcastEmail } from "../services/email";
 import {
   buildOperationsSummary,
@@ -122,9 +125,7 @@ const rsvpSettingsSchema = z.object({
 const localizationSchema = z.object({
   defaultLanguage: z.string().max(10),
   enabledLanguages: z.array(z.string().max(10)).min(1).max(5),
-  translations: z.record(z.record(z.any())).default({}),
-  translationMeta: z.record(z.record(z.any())).default({}),
-});
+}).strict();
 
 const collaboratorSchema = z.object({
   email: z.string().email(),
@@ -170,8 +171,7 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 const uniq = <T,>(values: T[]) => Array.from(new Set(values));
 
 const optionalText = (value: string | null | undefined) => {
-  const normalized = String(value ?? "").trim();
-  return normalized.length > 0 ? normalized : undefined;
+  return sanitizeOptionalText(value, { maxLength: 800 });
 };
 
 const parseOptionalDate = (value?: string) => {
@@ -313,12 +313,12 @@ const buildGuestMutationData = ({
   validateGuestPartyCounts(payload);
 
   return {
-    name: payload.name.trim(),
-    email: optionalText(payload.email),
+    name: sanitizePlainText(payload.name, { maxLength: 120 }),
+    email: payload.email ? sanitizeEmail(payload.email) : undefined,
     phone: optionalText(payload.phone),
     household: optionalText(payload.household),
     audienceSegment: optionalText(payload.audienceSegment) ?? "general",
-    tags: uniq(payload.tags.map((tag) => tag.trim()).filter(Boolean)).slice(0, 8),
+    tags: sanitizeTextList(payload.tags, 8, 30),
     language: optionalText(payload.language) ?? "en",
     invitationStatus: payload.invitationStatus,
     response: payload.response ?? undefined,
@@ -600,6 +600,7 @@ router.get(
 
 router.put(
   "/:inviteId/rsvp-settings",
+  createAiWriteRateLimit("invite-rsvp-settings"),
   asyncHandler(async (req, res) => {
     const inviteId = z.string().min(1).parse(req.params.inviteId);
     const payload = rsvpSettingsSchema.parse(req.body);
@@ -633,6 +634,7 @@ router.put(
 
 router.put(
   "/:inviteId/localization",
+  createAiLocalizationRateLimit("invite-localization"),
   asyncHandler(async (req, res) => {
     const inviteId = z.string().min(1).parse(req.params.inviteId);
     const payload = localizationSchema.parse(req.body);
@@ -980,19 +982,22 @@ router.post(
     await requireOwnerAccess(req.user!.id, inviteId);
 
     const invite = await prisma.invite.findUniqueOrThrow({ where: { id: inviteId } });
-    const existingUser = await prisma.user.findUnique({ where: { email: payload.email.toLowerCase() } });
+    const email = sanitizeEmail(payload.email);
+    const name = payload.name ? sanitizePlainText(payload.name, { maxLength: 120 }) : undefined;
+    const roleLabel = sanitizePlainText(payload.roleLabel, { maxLength: 60 });
+    const existingUser = await prisma.user.findUnique({ where: { email } });
     const collaborator = await prisma.inviteCollaborator.upsert({
       where: {
         inviteId_email: {
           inviteId,
-          email: payload.email.toLowerCase(),
+          email,
         },
       },
       create: {
         inviteId,
-        email: payload.email.toLowerCase(),
-        name: payload.name,
-        roleLabel: payload.roleLabel,
+        email,
+        name,
+        roleLabel,
         permissions: payload.permissions,
         invitedByUserId: req.user!.id,
         userId: existingUser?.id,
@@ -1000,8 +1005,8 @@ router.post(
         joinedAt: existingUser ? new Date() : undefined,
       },
       update: {
-        name: payload.name,
-        roleLabel: payload.roleLabel,
+        name,
+        roleLabel,
         permissions: payload.permissions,
         userId: existingUser?.id,
         status: existingUser ? "active" : "pending",
@@ -1009,10 +1014,10 @@ router.post(
       },
     });
 
-    await sendCollaboratorInviteEmail(payload.email.toLowerCase(), {
+    await sendCollaboratorInviteEmail(email, {
       inviterName: req.user!.name,
       eventName: invite.slug,
-      roleLabel: payload.roleLabel,
+      roleLabel,
       permissions: payload.permissions,
       dashboardUrl: `${env.FRONTEND_URL}/dashboard`,
     });
@@ -1107,9 +1112,9 @@ router.post(
       data: {
         inviteId,
         type: payload.type,
-        title: payload.title,
-        subject: payload.subject,
-        message: payload.message,
+        title: sanitizePlainText(payload.title, { maxLength: 120 }),
+        subject: payload.subject ? sanitizePlainText(payload.subject, { maxLength: 140 }) : undefined,
+        message: sanitizePlainText(payload.message, { maxLength: 2_000 }),
         language: payload.language,
         audience: payload.audience,
         createdByUserId: req.user!.id,
@@ -1133,12 +1138,12 @@ router.post(
 
       try {
         await sendGuestBroadcastEmail(guest.email!, {
-          subject: payload.subject || payload.title,
-          title: payload.title,
-          content: payload.message,
+          subject: payload.subject ? sanitizePlainText(payload.subject, { maxLength: 140 }) : sanitizePlainText(payload.title, { maxLength: 120 }),
+          title: sanitizePlainText(payload.title, { maxLength: 120 }),
+          content: sanitizePlainText(payload.message, { maxLength: 2_000 }),
           ctaLabel: "Open invitation",
           ctaUrl: inviteUrl,
-          trackingPixelUrl: `${env.FRONTEND_URL}/api/public/broadcasts/open/${recipient.openToken}.gif`,
+          trackingPixelUrl: buildCanonicalApiUrl(`/public/broadcasts/open/${recipient.openToken}.gif`),
         });
 
         const updatedRecipient = await prisma.broadcastRecipient.update({

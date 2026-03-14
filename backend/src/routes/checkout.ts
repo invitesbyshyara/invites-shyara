@@ -5,7 +5,9 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { env } from "../lib/env";
 import { verifyToken } from "../middleware/auth";
+import { requireCustomerCsrf } from "../middleware/csrf";
 import { validate } from "../middleware/validate";
+import { requireVerifiedCustomer } from "../middleware/verifiedCustomer";
 import {
   createRazorpayOrder,
   verifyRazorpayPayment,
@@ -91,6 +93,8 @@ const incrementPromoUsageAtomically = async (tx: Prisma.TransactionClient, where
 router.post(
   "/validate-promo",
   verifyToken,
+  requireVerifiedCustomer,
+  requireCustomerCsrf,
   validate({ body: validatePromoSchema }),
   asyncHandler(async (req, res) => {
     const { code, templateSlug } = req.body;
@@ -119,6 +123,8 @@ const createOrderSchema = z.object({
 router.post(
   "/create-order",
   verifyToken,
+  requireVerifiedCustomer,
+  requireCustomerCsrf,
   validate({ body: createOrderSchema }),
   asyncHandler(async (req, res) => {
     if (isCustomerAcquisitionLocked()) {
@@ -164,12 +170,12 @@ router.post(
           },
         });
 
-        await tx.userTemplate.create({
-          data: {
-            userId: user.id,
-            templateSlug,
-            transactionId: transaction.id,
-          },
+        // Use upsert (not create) so a concurrent duplicate request racing past the
+        // outer existingPurchase check gets a graceful update rather than a P2002 → 500.
+        await tx.userTemplate.upsert({
+          where: { userId_templateSlug: { userId: user.id, templateSlug } },
+          create: { userId: user.id, templateSlug, transactionId: transaction.id },
+          update: { transactionId: transaction.id },
         });
 
         if (template.isPremium || baseAmount > 0) {
@@ -366,6 +372,8 @@ const verifyPaymentSchema = z.object({
 router.post(
   "/verify-payment",
   verifyToken,
+  requireVerifiedCustomer,
+  requireCustomerCsrf,
   validate({ body: verifyPaymentSchema }),
   asyncHandler(async (req, res) => {
     const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;

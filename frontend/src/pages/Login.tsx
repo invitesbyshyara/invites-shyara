@@ -7,11 +7,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePlatformStatus } from '@/contexts/PlatformStatusContext';
 import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
+import { api } from '@/services/api';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, isLoading, pendingTemplateSlug, setPendingTemplateSlug } = useAuth();
+  const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const { login, isLoading, pendingTemplateSlug, setPendingTemplateSlug, setUser } = useAuth();
   const { status, isLoading: platformLoading } = usePlatformStatus();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -35,11 +39,39 @@ const Login = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await login(email, password);
+      const result = await login(email, password);
+      if ('requiresMfa' in result && result.requiresMfa) {
+        setMfaChallengeId(result.challengeId);
+        toast({ title: 'One more step', description: 'Enter your authentication code to finish signing in.' });
+        return;
+      }
       toast({ title: 'Welcome back!', description: 'You\'ve signed in successfully.' });
       handleRedirect();
     } catch (err) {
       toast({ title: 'Login failed', description: err instanceof Error ? err.message : 'Please check your credentials.', variant: 'destructive' });
+    }
+  };
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaChallengeId) {
+      return;
+    }
+
+    try {
+      const result = await api.completeMfaLogin(mfaChallengeId, {
+        ...(mfaCode ? { code: mfaCode } : {}),
+        ...(recoveryCode ? { recoveryCode } : {}),
+      });
+      setUser(result.user);
+      toast({ title: 'Welcome back!', description: 'You\'ve signed in successfully.' });
+      handleRedirect();
+    } catch (err) {
+      toast({
+        title: 'Verification failed',
+        description: err instanceof Error ? err.message : 'Enter a valid authentication code.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -62,6 +94,7 @@ const Login = () => {
           </div>
         )}
 
+        {!mfaChallengeId ? (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="email" className="font-body text-sm">Email</Label>
@@ -78,6 +111,36 @@ const Login = () => {
             {isLoading ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>
+        ) : (
+        <form onSubmit={handleMfaSubmit} className="space-y-4">
+          <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground font-body">
+            Multi-factor authentication is enabled for <span className="font-medium text-foreground">{email}</span>.
+          </div>
+          <div>
+            <Label htmlFor="mfaCode" className="font-body text-sm">Authenticator Code</Label>
+            <Input id="mfaCode" value={mfaCode} onChange={e => setMfaCode(e.target.value)} placeholder="123456" className="mt-1.5" />
+          </div>
+          <div>
+            <Label htmlFor="recoveryCode" className="font-body text-sm">Recovery Code</Label>
+            <Input id="recoveryCode" value={recoveryCode} onChange={e => setRecoveryCode(e.target.value.toUpperCase())} placeholder="ABCD-EFGH" className="mt-1.5" />
+          </div>
+          <Button type="submit" disabled={isLoading} className="w-full h-11 font-body">
+            Verify and Sign In
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full h-11 font-body"
+            onClick={() => {
+              setMfaChallengeId(null);
+              setMfaCode('');
+              setRecoveryCode('');
+            }}
+          >
+            Back
+          </Button>
+        </form>
+        )}
 
         {signupsLocked ? (
           <p className="text-center mt-6 text-sm font-body text-muted-foreground">

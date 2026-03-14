@@ -44,7 +44,7 @@ const STATUS_TABS = [
 ];
 
 const Dashboard = () => {
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -58,13 +58,16 @@ const Dashboard = () => {
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
     if (!isAuthenticated) {
       navigate("/login");
       return;
     }
 
     api.getInvites().then(setInvites).finally(() => setLoading(false));
-  }, [isAuthenticated, navigate]);
+  }, [authLoading, isAuthenticated, navigate]);
 
   const filteredInvites = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -132,6 +135,14 @@ const Dashboard = () => {
   };
 
   const firstPublishedInvite = invites.find((invite) => invite.status === "published" && canViewResponsesForInvite(invite));
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;

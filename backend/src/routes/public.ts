@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { sanitizeEmail, sanitizeOptionalText, sanitizePlainText } from "../lib/sanitize";
 import {
   normalizeLocalizationSettings,
   normalizeRsvpSettings,
@@ -16,8 +17,7 @@ const router = Router();
 const uniq = <T,>(values: T[]) => Array.from(new Set(values));
 
 const optionalText = (value: string | undefined) => {
-  const normalized = String(value ?? "").trim();
-  return normalized.length > 0 ? normalized : undefined;
+  return sanitizeOptionalText(value, { maxLength: 1_000 });
 };
 
 const validatePartyCounts = ({
@@ -32,6 +32,61 @@ const validatePartyCounts = ({
   if ((adultCount ?? 0) + (childCount ?? 0) > guestCount) {
     throw new AppError("Adults and children cannot exceed total guests", 400);
   }
+};
+
+const sanitizeCustomAnswers = (
+  answers: Record<string, string | number | boolean> | undefined,
+  settings: ReturnType<typeof normalizeRsvpSettings>
+) => {
+  const result: Record<string, string | number | boolean> = {};
+  const questionMap = new Map(settings.customQuestions.map((question) => [question.id, question]));
+
+  Object.entries(answers ?? {}).forEach(([questionId, value]) => {
+    const question = questionMap.get(questionId);
+    if (!question) {
+      return;
+    }
+
+    if (question.type === "boolean") {
+      if (typeof value !== "boolean") {
+        throw new AppError(`Answer for ${question.label} must be true or false`, 400);
+      }
+      result[questionId] = value;
+      return;
+    }
+
+    if (question.type === "number") {
+      if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+        throw new AppError(`Answer for ${question.label} must be a whole number`, 400);
+      }
+      if (value < 0 || value > TECHNICAL_GUEST_COUNT_LIMIT) {
+        throw new AppError(`Answer for ${question.label} is out of range`, 400);
+      }
+      result[questionId] = value;
+      return;
+    }
+
+    if (typeof value !== "string") {
+      throw new AppError(`Answer for ${question.label} must be text`, 400);
+    }
+
+    const maxLength = question.type === "textarea" ? 500 : 120;
+    const sanitized = sanitizePlainText(value, { maxLength });
+    if (!sanitized) {
+      return;
+    }
+
+    if (question.type === "select") {
+      const allowed = new Set(question.options ?? []);
+      if (!allowed.has(sanitized)) {
+        throw new AppError(`Answer for ${question.label} must match a configured option`, 400);
+      }
+    }
+
+    result[questionId] = sanitized;
+  });
+
+  return result;
 };
 
 router.get(
@@ -184,8 +239,8 @@ const submitRsvpSchema = z.object({
   roomRequirement: z.string().max(120).optional(),
   transportNeeded: z.boolean().optional(),
   transportMode: z.string().max(100).optional(),
-  customAnswers: z.record(z.any()).optional(),
-});
+  customAnswers: z.record(z.union([z.string(), z.number().finite(), z.boolean()])).optional(),
+}).strict();
 
 router.post(
   "/invites/:slug/rsvp",
@@ -216,7 +271,7 @@ router.post(
       throw new AppError("RSVP deadline has passed", 410);
     }
 
-    const normalizedEmail = body.email?.toLowerCase();
+    const normalizedEmail = body.email ? sanitizeEmail(body.email) : undefined;
     let guest = body.guestToken
       ? await prisma.inviteGuest.findFirst({
           where: { inviteId: invite.id, token: body.guestToken },
@@ -257,14 +312,7 @@ router.post(
       throw new AppError("Meal choice must match one of the host's configured options", 400);
     }
 
-    const filteredCustomAnswers = Object.fromEntries(
-      Object.entries(body.customAnswers ?? {}).filter(([questionId, value]) =>
-        settings.customQuestions.some((question) => question.id === questionId) &&
-        value !== "" &&
-        value !== undefined &&
-        value !== null
-      )
-    );
+    const filteredCustomAnswers = sanitizeCustomAnswers(body.customAnswers, settings);
 
     const effectiveAdultCount = body.response === "yes" && settings.collectAdultsChildrenSplit ? body.adultCount : undefined;
     const effectiveChildCount = body.response === "yes" && settings.collectAdultsChildrenSplit ? body.childCount : undefined;
@@ -277,96 +325,99 @@ router.post(
     const effectiveTransportNeeded = body.response === "yes" && settings.collectTravelPlans ? Boolean(body.transportNeeded) : false;
     const effectiveTransportMode = effectiveTransportNeeded ? optionalText(body.transportMode) : undefined;
 
-    if (guest) {
-      guest = await prisma.inviteGuest.update({
-        where: { id: guest.id },
-        data: {
-          name: body.name.trim(),
-          email: normalizedEmail ?? guest.email,
-          phone: optionalText(body.phone) ?? guest.phone,
-          household: optionalText(body.household) ?? guest.household,
-          language: selectedLanguage,
-          response: body.response,
-          guestCount: effectiveGuestCount,
-          adultCount: effectiveAdultCount,
-          childCount: effectiveChildCount,
-          message: optionalText(body.message),
-          mealChoice: effectiveMealChoice,
-          dietaryRestrictions: effectiveDietaryRestrictions,
-          customAnswers: filteredCustomAnswers,
-          stayNeeded: effectiveStayNeeded,
-          roomType: effectiveRoomRequirement,
-          shuttleRequired: effectiveTransportNeeded,
-          transportMode: effectiveTransportMode,
-          rsvpSubmittedAt: new Date(),
-        },
-      });
-    } else {
-      guest = await prisma.inviteGuest.create({
-        data: {
-          inviteId: invite.id,
-          name: body.name.trim(),
-          email: normalizedEmail,
-          phone: optionalText(body.phone),
-          household: optionalText(body.household),
-          language: selectedLanguage,
-          response: body.response,
-          guestCount: effectiveGuestCount,
-          adultCount: effectiveAdultCount,
-          childCount: effectiveChildCount,
-          message: optionalText(body.message),
-          mealChoice: effectiveMealChoice,
-          dietaryRestrictions: effectiveDietaryRestrictions,
-          customAnswers: filteredCustomAnswers,
-          stayNeeded: effectiveStayNeeded,
-          roomType: effectiveRoomRequirement,
-          shuttleRequired: effectiveTransportNeeded,
-          transportMode: effectiveTransportMode,
-          rsvpSubmittedAt: new Date(),
-        },
-      });
-    }
-
-    const existing = await prisma.rsvp.findFirst({
-      where: {
-        inviteId: invite.id,
-        OR: [
-          { guestId: guest.id },
-          ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
-        ],
-      },
-    });
-
-    const rsvpPayload = {
-      inviteId: invite.id,
-      guestId: guest.id,
-      name: body.name,
-      email: normalizedEmail,
-      response: body.response,
-      guestCount: effectiveGuestCount,
-      adultCount: effectiveAdultCount,
-      childCount: effectiveChildCount,
-      message: optionalText(body.message),
-      mealChoice: effectiveMealChoice,
-      dietaryRestrictions: effectiveDietaryRestrictions,
-      customAnswers: filteredCustomAnswers,
-      stayNeeded: effectiveStayNeeded,
-      roomRequirement: effectiveRoomRequirement,
-      transportNeeded: effectiveTransportNeeded,
-      transportMode: effectiveTransportMode,
-      language: selectedLanguage,
-      ipAddress: req.ip,
-      submittedAt: new Date(),
-    };
-
-    const saved = existing
-      ? await prisma.rsvp.update({
-          where: { id: existing.id },
-          data: rsvpPayload,
-        })
-      : await prisma.rsvp.create({
-          data: rsvpPayload,
+    // Wrap guest upsert + RSVP upsert in a single transaction so concurrent submissions
+    // from the same guest (e.g. mobile double-tap) can't produce duplicate RSVP rows.
+    // Emails are intentionally sent OUTSIDE the transaction (after commit).
+    const { saved, wasExisting } = await prisma.$transaction(async (tx) => {
+      let txGuest = guest;
+      if (txGuest) {
+        txGuest = await tx.inviteGuest.update({
+          where: { id: txGuest.id },
+          data: {
+            name: sanitizePlainText(body.name, { maxLength: 120 }),
+            email: normalizedEmail ?? txGuest.email,
+            phone: optionalText(body.phone) ?? txGuest.phone,
+            household: optionalText(body.household) ?? txGuest.household,
+            language: selectedLanguage,
+            response: body.response,
+            guestCount: effectiveGuestCount,
+            adultCount: effectiveAdultCount,
+            childCount: effectiveChildCount,
+            message: optionalText(body.message),
+            mealChoice: effectiveMealChoice,
+            dietaryRestrictions: effectiveDietaryRestrictions,
+            customAnswers: filteredCustomAnswers,
+            stayNeeded: effectiveStayNeeded,
+            roomType: effectiveRoomRequirement,
+            shuttleRequired: effectiveTransportNeeded,
+            transportMode: effectiveTransportMode,
+            rsvpSubmittedAt: new Date(),
+          },
         });
+      } else {
+        txGuest = await tx.inviteGuest.create({
+          data: {
+            inviteId: invite.id,
+            name: sanitizePlainText(body.name, { maxLength: 120 }),
+            email: normalizedEmail,
+            phone: optionalText(body.phone),
+            household: optionalText(body.household),
+            language: selectedLanguage,
+            response: body.response,
+            guestCount: effectiveGuestCount,
+            adultCount: effectiveAdultCount,
+            childCount: effectiveChildCount,
+            message: optionalText(body.message),
+            mealChoice: effectiveMealChoice,
+            dietaryRestrictions: effectiveDietaryRestrictions,
+            customAnswers: filteredCustomAnswers,
+            stayNeeded: effectiveStayNeeded,
+            roomType: effectiveRoomRequirement,
+            shuttleRequired: effectiveTransportNeeded,
+            transportMode: effectiveTransportMode,
+            rsvpSubmittedAt: new Date(),
+          },
+        });
+      }
+
+      const existing = await tx.rsvp.findFirst({
+        where: {
+          inviteId: invite.id,
+          OR: [
+            { guestId: txGuest.id },
+            ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+          ],
+        },
+      });
+
+      const rsvpPayload = {
+        inviteId: invite.id,
+        guestId: txGuest.id,
+        name: sanitizePlainText(body.name, { maxLength: 120 }),
+        email: normalizedEmail,
+        response: body.response,
+        guestCount: effectiveGuestCount,
+        adultCount: effectiveAdultCount,
+        childCount: effectiveChildCount,
+        message: optionalText(body.message),
+        mealChoice: effectiveMealChoice,
+        dietaryRestrictions: effectiveDietaryRestrictions,
+        customAnswers: filteredCustomAnswers,
+        stayNeeded: effectiveStayNeeded,
+        roomRequirement: effectiveRoomRequirement,
+        transportNeeded: effectiveTransportNeeded,
+        transportMode: effectiveTransportMode,
+        language: selectedLanguage,
+        ipAddress: req.ip,
+        submittedAt: new Date(),
+      };
+
+      const txSaved = existing
+        ? await tx.rsvp.update({ where: { id: existing.id }, data: rsvpPayload })
+        : await tx.rsvp.create({ data: rsvpPayload });
+
+      return { saved: txSaved, wasExisting: Boolean(existing) };
+    });
 
     const totalCount = await prisma.rsvp.count({ where: { inviteId: invite.id } });
     const inviteName =
@@ -380,7 +431,7 @@ router.post(
 
     if (normalizedEmail) {
       await sendRsvpConfirmationEmail(normalizedEmail, {
-        guestName: body.name,
+        guestName: sanitizePlainText(body.name, { maxLength: 120 }),
         inviteName,
         response: body.response,
         eventDate,
@@ -388,14 +439,14 @@ router.post(
     }
 
     await sendRsvpNotificationEmail(invite.user.email, {
-      guestName: body.name,
+      guestName: sanitizePlainText(body.name, { maxLength: 120 }),
       response: body.response,
       totalCount,
       inviteSlug: invite.slug,
       unsubscribeToken: invite.user.unsubscribeToken ?? undefined,
     });
 
-    return sendSuccess(res, saved, undefined, existing ? 200 : 201);
+    return sendSuccess(res, saved, undefined, wasExisting ? 200 : 201);
   }),
 );
 

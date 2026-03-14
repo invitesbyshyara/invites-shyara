@@ -2,6 +2,7 @@ import { Router } from "express";
 import { EventCategory } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma";
+import { sanitizePlainText } from "../../lib/sanitize";
 import { requirePermission, verifyAdminToken } from "../../middleware/adminAuth";
 import { validate } from "../../middleware/validate";
 import { AppError, asyncHandler, sendSuccess } from "../../utils/http";
@@ -52,8 +53,8 @@ router.post(
     const category = await prisma.category.create({
       data: {
         slug: req.body.slug,
-        name: req.body.name,
-        emoji: req.body.emoji,
+        name: sanitizePlainText(req.body.name, { maxLength: 100 }),
+        emoji: sanitizePlainText(req.body.emoji, { maxLength: 10 }),
         displayOrder: req.body.displayOrder ?? 0,
         isVisible: req.body.isVisible ?? true,
       },
@@ -103,8 +104,8 @@ router.put(
     const category = await prisma.category.update({
       where: { id: req.params.id },
       data: {
-        ...(req.body.name !== undefined ? { name: req.body.name } : {}),
-        ...(req.body.emoji !== undefined ? { emoji: req.body.emoji } : {}),
+        ...(req.body.name !== undefined ? { name: sanitizePlainText(req.body.name, { maxLength: 100 }) } : {}),
+        ...(req.body.emoji !== undefined ? { emoji: sanitizePlainText(req.body.emoji, { maxLength: 10 }) } : {}),
         ...(req.body.displayOrder !== undefined ? { displayOrder: req.body.displayOrder } : {}),
         ...(req.body.isVisible !== undefined ? { isVisible: req.body.isVisible } : {}),
       },

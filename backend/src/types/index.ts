@@ -6,6 +6,7 @@ declare global {
       user?: User;
       admin?: AdminUser;
       rawBody?: Buffer;
+      requestId?: string;
     }
   }
 }

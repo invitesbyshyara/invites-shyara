@@ -77,6 +77,14 @@ export interface User {
   email: string;
   phone?: string;
   avatar?: string;
+  emailVerified: boolean;
+  emailPreferences?: {
+    rsvpNotifications: boolean;
+    weeklyDigest: boolean;
+    marketing: boolean;
+  };
+  mfaEnabled?: boolean;
+  recoveryCodesRemaining?: number;
 }
 
 export interface PlatformStatus {

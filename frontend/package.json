@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "security:check": "node ../scripts/security-guard.mjs src ../backend/src",
+    "audit:prod": "npm audit --omit=dev",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
@@ -59,7 +61,7 @@
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.61.1",
     "react-resizable-panels": "^2.1.9",
-    "react-router-dom": "^6.30.1",
+    "react-router-dom": "^6.30.3",
     "recharts": "^2.15.4",
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0",
@@ -86,7 +88,14 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vite": "^5.4.19",
+    "vite": "^5.4.21",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "@remix-run/router": "^1.23.2",
+    "react-router": "^6.30.3",
+    "lodash": "^4.17.23",
+    "glob": "^10.5.0",
+    "minimatch": "^9.0.7"
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,38 +9,69 @@ import { useToast } from '@/hooks/use-toast';
 import { api } from '@/services/api';
 
 const Account = () => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
-  const [phone, setPhone] = useState(user?.phone || '');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const [notifRsvp, setNotifRsvp] = useState(true);
+  const [notifWeekly, setNotifWeekly] = useState(false);
+  const [notifMarketing, setNotifMarketing] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [verificationSending, setVerificationSending] = useState(false);
 
-  // Password
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaRecoveryCode, setMfaRecoveryCode] = useState('');
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
   const [passwordTouched, setPasswordTouched] = useState<Record<string, boolean>>({});
 
-  // Avatar
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [avatar, setAvatar] = useState<string | null>(null);
-
-  // Notifications
-  const [notifRsvp, setNotifRsvp] = useState(true);
-  const [notifWeekly, setNotifWeekly] = useState(false);
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaRecoveryRemaining, setMfaRecoveryRemaining] = useState(0);
+  const [mfaSetupQr, setMfaSetupQr] = useState<string | null>(null);
+  const [mfaSetupSecret, setMfaSetupSecret] = useState<string | null>(null);
+  const [mfaSetupCode, setMfaSetupCode] = useState('');
+  const [newRecoveryCodes, setNewRecoveryCodes] = useState<string[]>([]);
 
   useEffect(() => {
-    const savedAvatar = localStorage.getItem('shyara_avatar');
-    if (savedAvatar) setAvatar(savedAvatar);
-    const savedRsvp = localStorage.getItem('shyara_notif_rsvp');
-    const savedWeekly = localStorage.getItem('shyara_notif_weekly');
-    if (savedRsvp !== null) setNotifRsvp(savedRsvp === 'true');
-    if (savedWeekly !== null) setNotifWeekly(savedWeekly === 'true');
-  }, []);
+    setName(user?.name || '');
+    setEmail(user?.email || '');
+    setPhone(user?.phone || '');
+    setAvatar(user?.avatar || null);
+    setNotifRsvp(user?.emailPreferences?.rsvpNotifications ?? true);
+    setNotifWeekly(user?.emailPreferences?.weeklyDigest ?? false);
+    setNotifMarketing(user?.emailPreferences?.marketing ?? true);
+    setMfaEnabled(Boolean(user?.mfaEnabled));
+    setMfaRecoveryRemaining(user?.recoveryCodesRemaining ?? 0);
+  }, [user]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    void api.getMfaStatus()
+      .then((status) => {
+        setMfaEnabled(status.enabled);
+        setMfaRecoveryRemaining(status.recoveryCodesRemaining);
+      })
+      .catch(() => undefined);
+  }, [isAuthenticated]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -49,10 +80,20 @@ const Account = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.updateProfile({ name, email, phone });
+      await api.updateProfile({
+        name,
+        phone,
+        avatarUrl: avatar,
+        emailPreferences: {
+          rsvpNotifications: notifRsvp,
+          weeklyDigest: notifWeekly,
+          marketing: notifMarketing,
+        },
+      });
+      await refreshUser();
       toast({ title: 'Profile updated!', description: 'Your changes have been saved.' });
-    } catch {
-      toast({ title: 'Failed to update', variant: 'destructive' });
+    } catch (err) {
+      toast({ title: 'Failed to update', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -66,40 +107,40 @@ const Account = () => {
     setPasswordErrors(errs);
     setPasswordTouched({ currentPassword: true, newPassword: true, confirmPassword: true });
     if (Object.keys(errs).length > 0) return;
+
     try {
-      await api.updatePassword(currentPassword, newPassword);
+      const result = await api.updatePassword(currentPassword, newPassword, {
+        ...(mfaCode ? { mfaCode } : {}),
+        ...(mfaRecoveryCode ? { recoveryCode: mfaRecoveryCode } : {}),
+      });
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      setMfaCode('');
+      setMfaRecoveryCode('');
       setPasswordErrors({});
       setPasswordTouched({});
-      toast({ title: 'Password updated successfully' });
+      toast({ title: result.message });
+      await logout();
+      navigate('/login', { replace: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to update password';
       setPasswordErrors({ currentPassword: msg });
     }
   };
 
-  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      setAvatar(result);
-      localStorage.setItem('shyara_avatar', result);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleNotifRsvp = (val: boolean) => {
-    setNotifRsvp(val);
-    localStorage.setItem('shyara_notif_rsvp', String(val));
-  };
-
-  const handleNotifWeekly = (val: boolean) => {
-    setNotifWeekly(val);
-    localStorage.setItem('shyara_notif_weekly', String(val));
+    try {
+      const uploaded = await api.uploadImage(file);
+      setAvatar(uploaded.url);
+      toast({ title: 'Photo uploaded', description: 'Save your profile to keep this image.' });
+    } catch (err) {
+      toast({ title: 'Upload failed', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const handleDelete = () => {
@@ -109,14 +150,89 @@ const Account = () => {
         toast({ title: 'Account deleted', description: 'Your account and associated data were removed.' });
         navigate('/');
       })
-      .catch(() => {
-        toast({ title: 'Failed to delete account', variant: 'destructive' });
+      .catch((err) => {
+        toast({ title: 'Failed to delete account', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
       });
   };
 
   const handleLogout = async () => {
     await logout();
     navigate('/', { replace: true });
+  };
+
+  const handleResendVerification = async () => {
+    setVerificationSending(true);
+    try {
+      const result = await api.requestEmailVerification();
+      toast({ title: 'Verification sent', description: result.message });
+    } catch (err) {
+      toast({ title: 'Failed to send verification email', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    } finally {
+      setVerificationSending(false);
+    }
+  };
+
+  const handleBeginMfaEnrollment = async () => {
+    try {
+      const result = await api.beginMfaEnrollment();
+      setMfaSetupQr(result.qrCodeDataUrl);
+      setMfaSetupSecret(result.secret);
+      setNewRecoveryCodes([]);
+    } catch (err) {
+      toast({ title: 'Unable to start MFA setup', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    }
+  };
+
+  const handleVerifyMfaEnrollment = async () => {
+    try {
+      const result = await api.verifyMfaEnrollment(mfaSetupCode);
+      setNewRecoveryCodes(result.recoveryCodes);
+      setMfaSetupCode('');
+      setMfaSetupQr(null);
+      setMfaSetupSecret(null);
+      await refreshUser();
+      const status = await api.getMfaStatus();
+      setMfaEnabled(status.enabled);
+      setMfaRecoveryRemaining(status.recoveryCodesRemaining);
+      toast({ title: 'MFA enabled', description: 'Store your recovery codes in a safe place.' });
+    } catch (err) {
+      toast({ title: 'Unable to verify MFA', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    }
+  };
+
+  const handleRotateRecoveryCodes = async () => {
+    try {
+      const result = await api.rotateMfaRecoveryCodes({
+        ...(mfaCode ? { code: mfaCode } : {}),
+        ...(mfaRecoveryCode ? { recoveryCode: mfaRecoveryCode } : {}),
+      });
+      setNewRecoveryCodes(result.recoveryCodes);
+      setMfaCode('');
+      setMfaRecoveryCode('');
+      const status = await api.getMfaStatus();
+      setMfaRecoveryRemaining(status.recoveryCodesRemaining);
+      toast({ title: 'Recovery codes rotated' });
+    } catch (err) {
+      toast({ title: 'Unable to rotate recovery codes', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    }
+  };
+
+  const handleDisableMfa = async () => {
+    try {
+      const result = await api.disableMfa({
+        ...(mfaCode ? { code: mfaCode } : {}),
+        ...(mfaRecoveryCode ? { recoveryCode: mfaRecoveryCode } : {}),
+      });
+      setMfaEnabled(false);
+      setMfaRecoveryRemaining(0);
+      setNewRecoveryCodes([]);
+      setMfaCode('');
+      setMfaRecoveryCode('');
+      await refreshUser();
+      toast({ title: result.message });
+    } catch (err) {
+      toast({ title: 'Unable to disable MFA', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    }
   };
 
   return (
@@ -131,10 +247,9 @@ const Account = () => {
         </div>
       </nav>
 
-      <div className="container max-w-xl py-12 px-4 space-y-8">
+      <div className="container max-w-2xl py-12 px-4 space-y-8">
         <h1 className="font-display text-3xl font-bold">Account Settings</h1>
 
-        {/* Profile */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-5">
           <h2 className="font-display text-lg font-semibold">Profile</h2>
           <div>
@@ -145,6 +260,14 @@ const Account = () => {
             <Label className="font-body text-sm">Email</Label>
             <Input type="email" value={email} disabled className="mt-1.5 opacity-60 cursor-not-allowed" />
             <p className="text-xs text-muted-foreground font-body mt-1">Email cannot be changed.</p>
+            {!user?.emailVerified && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                Verify your email to unlock invite creation, payments, and collaborator access.
+                <Button variant="outline" size="sm" className="mt-3 w-full" disabled={verificationSending} onClick={() => void handleResendVerification()}>
+                  {verificationSending ? 'Sending...' : 'Resend verification email'}
+                </Button>
+              </div>
+            )}
           </div>
           <div>
             <Label className="font-body text-sm">Phone</Label>
@@ -156,7 +279,7 @@ const Account = () => {
               <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-display font-bold text-xl overflow-hidden">
                 {avatar ? <img src={avatar} alt="Avatar" className="w-full h-full object-cover" /> : (name.charAt(0) || '?')}
               </div>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarSelect} />
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleAvatarSelect} />
               <Button variant="outline" size="sm" className="font-body text-xs" onClick={() => fileRef.current?.click()}>Upload Photo</Button>
             </div>
           </div>
@@ -165,47 +288,114 @@ const Account = () => {
           </Button>
         </div>
 
-        {/* Password */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-5">
           <h2 className="font-display text-lg font-semibold">Change Password</h2>
           <div>
             <Label className="font-body text-sm">Current Password</Label>
-            <Input type="password" placeholder="••••••••" className="mt-1.5" value={currentPassword} onChange={e => { setCurrentPassword(e.target.value); setPasswordErrors(p => { const n = {...p}; delete n.currentPassword; return n; }); }} onBlur={() => setPasswordTouched(p => ({...p, currentPassword: true}))} />
+            <Input type="password" className="mt-1.5" value={currentPassword} onChange={e => { setCurrentPassword(e.target.value); setPasswordErrors(p => { const n = {...p}; delete n.currentPassword; return n; }); }} onBlur={() => setPasswordTouched(p => ({...p, currentPassword: true}))} />
             {passwordTouched.currentPassword && passwordErrors.currentPassword && <p className="text-[hsl(0,72%,51%)] text-xs mt-1 font-body">{passwordErrors.currentPassword}</p>}
           </div>
           <div>
             <Label className="font-body text-sm">New Password</Label>
-            <Input type="password" placeholder="••••••••" className="mt-1.5" value={newPassword} onChange={e => { setNewPassword(e.target.value); setPasswordErrors(p => { const n = {...p}; delete n.newPassword; return n; }); }} onBlur={() => setPasswordTouched(p => ({...p, newPassword: true}))} />
+            <Input type="password" className="mt-1.5" value={newPassword} onChange={e => { setNewPassword(e.target.value); setPasswordErrors(p => { const n = {...p}; delete n.newPassword; return n; }); }} onBlur={() => setPasswordTouched(p => ({...p, newPassword: true}))} />
             {passwordTouched.newPassword && passwordErrors.newPassword && <p className="text-[hsl(0,72%,51%)] text-xs mt-1 font-body">{passwordErrors.newPassword}</p>}
           </div>
           <div>
             <Label className="font-body text-sm">Confirm Password</Label>
-            <Input type="password" placeholder="••••••••" className="mt-1.5" value={confirmPassword} onChange={e => { setConfirmPassword(e.target.value); setPasswordErrors(p => { const n = {...p}; delete n.confirmPassword; return n; }); }} onBlur={() => setPasswordTouched(p => ({...p, confirmPassword: true}))} />
+            <Input type="password" className="mt-1.5" value={confirmPassword} onChange={e => { setConfirmPassword(e.target.value); setPasswordErrors(p => { const n = {...p}; delete n.confirmPassword; return n; }); }} onBlur={() => setPasswordTouched(p => ({...p, confirmPassword: true}))} />
             {passwordTouched.confirmPassword && passwordErrors.confirmPassword && <p className="text-[hsl(0,72%,51%)] text-xs mt-1 font-body">{passwordErrors.confirmPassword}</p>}
           </div>
-          <Button variant="outline" className="font-body" onClick={handlePasswordChange}>Update Password</Button>
+          {mfaEnabled && (
+            <>
+              <div>
+                <Label className="font-body text-sm">Authenticator Code</Label>
+                <Input value={mfaCode} onChange={e => setMfaCode(e.target.value)} placeholder="123456" className="mt-1.5" />
+              </div>
+              <div>
+                <Label className="font-body text-sm">Recovery Code</Label>
+                <Input value={mfaRecoveryCode} onChange={e => setMfaRecoveryCode(e.target.value.toUpperCase())} placeholder="ABCD-EFGH" className="mt-1.5" />
+              </div>
+            </>
+          )}
+          <Button variant="outline" className="font-body" onClick={() => void handlePasswordChange()}>Update Password</Button>
         </div>
 
-        {/* Notifications */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-5">
           <h2 className="font-display text-lg font-semibold">Notifications</h2>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-body font-medium">Email on new RSVP</p>
-              <p className="text-xs text-muted-foreground font-body">Get notified when a guest responds. This preference is saved on this device.</p>
+              <p className="text-xs text-muted-foreground font-body">Receive an email when a guest responds.</p>
             </div>
-            <Switch checked={notifRsvp} onCheckedChange={handleNotifRsvp} />
+            <Switch checked={notifRsvp} onCheckedChange={setNotifRsvp} />
           </div>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-body font-medium">Weekly summary</p>
-              <p className="text-xs text-muted-foreground font-body">Receive a weekly digest of activity. This preference is saved on this device.</p>
+              <p className="text-xs text-muted-foreground font-body">Get a weekly digest of invite activity.</p>
             </div>
-            <Switch checked={notifWeekly} onCheckedChange={handleNotifWeekly} />
+            <Switch checked={notifWeekly} onCheckedChange={setNotifWeekly} />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-body font-medium">Product updates</p>
+              <p className="text-xs text-muted-foreground font-body">Receive occasional updates about new Shyara features.</p>
+            </div>
+            <Switch checked={notifMarketing} onCheckedChange={setNotifMarketing} />
           </div>
         </div>
 
-        {/* Danger Zone */}
+        <div className="rounded-xl border border-border bg-card p-6 space-y-5">
+          <h2 className="font-display text-lg font-semibold">Multi-Factor Authentication</h2>
+          <p className="text-sm text-muted-foreground font-body">
+            {mfaEnabled
+              ? `MFA is enabled. ${mfaRecoveryRemaining} recovery codes remain unused.`
+              : 'Add an authenticator app to protect your account.'}
+          </p>
+          {!mfaEnabled ? (
+            <>
+              {!mfaSetupQr ? (
+                <Button variant="outline" onClick={() => void handleBeginMfaEnrollment()}>Enable MFA</Button>
+              ) : (
+                <div className="space-y-4">
+                  <img src={mfaSetupQr} alt="MFA setup QR code" className="h-48 w-48 rounded-lg border border-border bg-white p-2" />
+                  {mfaSetupSecret && <p className="text-xs font-mono text-muted-foreground break-all">{mfaSetupSecret}</p>}
+                  <div>
+                    <Label className="font-body text-sm">Authenticator code</Label>
+                    <Input value={mfaSetupCode} onChange={e => setMfaSetupCode(e.target.value)} placeholder="123456" className="mt-1.5" />
+                  </div>
+                  <Button onClick={() => void handleVerifyMfaEnrollment()}>Verify and Enable</Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <Label className="font-body text-sm">Authenticator code</Label>
+                <Input value={mfaCode} onChange={e => setMfaCode(e.target.value)} placeholder="123456" className="mt-1.5" />
+              </div>
+              <div>
+                <Label className="font-body text-sm">Recovery code</Label>
+                <Input value={mfaRecoveryCode} onChange={e => setMfaRecoveryCode(e.target.value.toUpperCase())} placeholder="ABCD-EFGH" className="mt-1.5" />
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button variant="outline" onClick={() => void handleRotateRecoveryCodes()}>Rotate Recovery Codes</Button>
+                <Button variant="destructive" onClick={() => void handleDisableMfa()}>Disable MFA</Button>
+              </div>
+            </div>
+          )}
+          {newRecoveryCodes.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+              <p className="text-sm font-medium text-amber-950">Save these recovery codes</p>
+              <div className="space-y-1 text-sm font-mono text-amber-950">
+                {newRecoveryCodes.map((code) => (
+                  <div key={code}>{code}</div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="rounded-xl border border-destructive/30 bg-card p-6">
           <h2 className="font-display text-lg font-semibold text-destructive mb-2">Danger Zone</h2>
           <p className="text-sm text-muted-foreground font-body mb-4">Permanently delete your account and all associated data. This action cannot be undone.</p>

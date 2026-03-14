@@ -31,6 +31,7 @@ export const validate = (schemas: ValidateInput) => {
             field: issue.path.join("."),
             message: issue.message,
           })),
+          "VALIDATION_ERROR",
         );
       }
       next(error);

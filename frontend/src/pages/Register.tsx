@@ -8,6 +8,21 @@ import { usePlatformStatus } from '@/contexts/PlatformStatusContext';
 import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
 
+type PasswordRule = { label: string; test: (p: string) => boolean };
+
+const PASSWORD_RULES: PasswordRule[] = [
+  { label: 'At least 12 characters', test: (p) => p.length >= 12 },
+  { label: 'Uppercase letter', test: (p) => /[A-Z]/.test(p) },
+  { label: 'Lowercase letter', test: (p) => /[a-z]/.test(p) },
+  { label: 'Number', test: (p) => /[0-9]/.test(p) },
+  { label: 'Special character', test: (p) => /[^A-Za-z0-9]/.test(p) },
+];
+
+const getPasswordScore = (p: string) => PASSWORD_RULES.filter((r) => r.test(p)).length;
+
+const STRENGTH_LABELS = ['', 'Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+const STRENGTH_COLORS = ['bg-muted', 'bg-destructive', 'bg-destructive', 'bg-yellow-500', 'bg-blue-500', 'bg-green-500'];
+
 const Register = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -21,6 +36,9 @@ const Register = () => {
   const next = searchParams.get('next');
   const continuingCheckout = next?.startsWith('/checkout/');
   const signupsLocked = platformLoading || status.customerAcquisitionLocked;
+
+  const passwordScore = getPasswordScore(password);
+  const firstFailingRule = password.length > 0 ? PASSWORD_RULES.find((r) => !r.test(password)) : null;
 
   const handleRedirect = () => {
     if (pendingTemplateSlug) {
@@ -53,7 +71,7 @@ const Register = () => {
 
     try {
       await registerFn(name, email, password);
-      toast({ title: 'Welcome to Shyara!', description: 'Account created successfully.' });
+      toast({ title: 'Welcome to Shyara!', description: 'Account created successfully. Check your inbox to verify your email.' });
       handleRedirect();
     } catch (err) {
       toast({
@@ -96,9 +114,30 @@ const Register = () => {
               <Label htmlFor="email" className="font-body text-sm">Email</Label>
               <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required disabled={signupsLocked} className="mt-1.5" />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="password" className="font-body text-sm">Password</Label>
-              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" required disabled={signupsLocked} className="mt-1.5" />
+              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" required disabled={signupsLocked} />
+              {password.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  {/* Strength bar — 5 segments */}
+                  <div className="flex gap-1">
+                    {PASSWORD_RULES.map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1 flex-1 rounded-full transition-colors duration-200 ${i < passwordScore ? STRENGTH_COLORS[passwordScore] : 'bg-muted'}`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className={`text-xs font-body ${passwordScore === 5 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                      {firstFailingRule ? firstFailingRule.label + ' required' : 'All requirements met'}
+                    </p>
+                    <p className={`text-xs font-body font-medium ${passwordScore === 5 ? 'text-green-600' : passwordScore >= 3 ? 'text-blue-500' : 'text-destructive'}`}>
+                      {STRENGTH_LABELS[passwordScore]}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <Label htmlFor="confirm" className="font-body text-sm">Confirm Password</Label>

@@ -1,14 +1,20 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { AdminUser, AdminRole } from '../types';
-import { adminApi } from '../services/api';
+import { AdminUser } from '../types';
+import { adminApi, hasAdminSessionCookie } from '../services/api';
 
 interface AdminAuthContextType {
   user: AdminUser | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<
+    | { requiresMfa: true; challengeId: string; admin: AdminUser }
+    | { requiresMfaSetup: true; challengeId: string; admin: AdminUser }
+    | { admin: AdminUser }
+  >;
+  logout: () => Promise<void>;
   hasPermission: (action: AdminPermission) => boolean;
   startImpersonation: (customerId: string, customerName: string) => void;
+  refreshUser: () => Promise<AdminUser | null>;
+  setUser: (user: AdminUser | null) => void;
 }
 
 type AdminPermission =
@@ -38,26 +44,59 @@ export const useAdminAuth = () => {
 };
 
 export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AdminUser | null>(() => {
-    const stored = sessionStorage.getItem('shyara_admin_user');
-    return stored ? JSON.parse(stored) : null;
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<AdminUser | null>(null);
+  const [isLoading, setIsLoading] = useState(() => hasAdminSessionCookie());
+
+  useEffect(() => {
+    if (!hasAdminSessionCookie()) {
+      setIsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const restore = async () => {
+      setIsLoading(true);
+      try {
+        const current = await adminApi.me();
+        if (isMounted) {
+          setUser(current);
+        }
+      } catch {
+        if (isMounted) {
+          setUser(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void restore();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const u = await adminApi.login(email, password);
-      setUser(u);
-      sessionStorage.setItem('shyara_admin_user', JSON.stringify(u));
+      const result = await adminApi.login(email, password);
+      if ('admin' in result && !('requiresMfa' in result) && !('requiresMfaSetup' in result)) {
+        setUser(result.admin);
+      }
+      return result;
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   const logout = useCallback(() => {
-    setUser(null);
-    sessionStorage.removeItem('shyara_admin_user');
+    return adminApi.logout().finally(() => {
+      setUser(null);
+    });
   }, []);
 
   const hasPermission = useCallback((action: AdminPermission): boolean => {
@@ -79,8 +118,19 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    if (!hasAdminSessionCookie()) {
+      setUser(null);
+      return null;
+    }
+
+    const current = await adminApi.me();
+    setUser(current);
+    return current;
+  }, []);
+
   return (
-    <AdminAuthContext.Provider value={{ user, isLoading, login, logout, hasPermission, startImpersonation }}>
+    <AdminAuthContext.Provider value={{ user, isLoading, login, logout, hasPermission, startImpersonation, refreshUser, setUser }}>
       {children}
     </AdminAuthContext.Provider>
   );

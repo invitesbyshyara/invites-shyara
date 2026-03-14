@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { InviteStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
+import { sanitizeJsonRecord } from "../lib/json";
 import { prisma } from "../lib/prisma";
+import { createAiWriteRateLimit } from "../middleware/aiRateLimit";
 import { verifyToken } from "../middleware/auth";
-import { upload } from "../middleware/upload";
+import { upload, validateUploadedImage } from "../middleware/upload";
 import { validate } from "../middleware/validate";
+import { requireVerifiedCustomer } from "../middleware/verifiedCustomer";
 import { sendInvitePublishedEmail } from "../services/email";
 import {
   collaboratorHasAnyPermission,
@@ -18,7 +21,11 @@ import {
   scheduleInviteTranslationRefresh,
 } from "../services/inviteTranslation";
 import { validateSlugFormat, isInviteSlugAvailable } from "../services/slug";
-import { uploadBufferToCloudinary } from "../services/storage";
+import {
+  getUserUploadFolder,
+  normalizeUploadedImageBuffer,
+  uploadBufferToCloudinary,
+} from "../services/storage";
 import { env } from "../lib/env";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 
@@ -100,12 +107,14 @@ router.get(
 const createInviteSchema = z.object({
   templateSlug: z.string().min(1),
   slug: z.string().min(3).max(60),
-  data: z.record(z.any()).default({}),
-});
+  data: z.unknown().default({}),
+}).strict();
 
 router.post(
   "/",
   verifyToken,
+  requireVerifiedCustomer,
+  createAiWriteRateLimit("invite-create"),
   validate({ body: createInviteSchema }),
   asyncHandler(async (req, res) => {
     const user = req.user!;
@@ -140,7 +149,7 @@ router.post(
       }
     }
 
-    const normalizedData = asDataRecord(normalizeInviteDataForPersistence(data));
+    const normalizedData = asDataRecord(normalizeInviteDataForPersistence(sanitizeJsonRecord(data)));
     const dataWithTranslationState = markInviteDataTranslationsStale(normalizedData) as Prisma.InputJsonValue;
 
     const invite = await prisma.invite.create({
@@ -196,14 +205,29 @@ router.get(
 router.post(
   "/upload-image",
   verifyToken,
+  requireVerifiedCustomer,
   upload.single("file"),
   asyncHandler(async (req, res) => {
     if (!req.file) {
       throw new AppError("File is required", 400);
     }
 
+    const detectedImage = validateUploadedImage(req.file);
+    let normalizedBuffer: Buffer;
+    try {
+      normalizedBuffer = await normalizeUploadedImageBuffer(req.file.buffer, detectedImage.extension);
+    } catch {
+      throw new AppError("Invalid image payload", 400, { code: "INVALID_IMAGE_PAYLOAD" });
+    }
+
     const userId = req.user!.id;
-    const uploaded = await uploadBufferToCloudinary(req.file.buffer, `shyara/${userId}`);
+    let uploaded: { url: string; publicId: string };
+
+    try {
+      uploaded = await uploadBufferToCloudinary(normalizedBuffer, getUserUploadFolder(userId));
+    } catch {
+      throw new AppError("Upload failed", 502);
+    }
 
     return sendSuccess(res, uploaded, undefined, 201);
   }),
@@ -261,13 +285,17 @@ router.get(
 
 const updateInviteSchema = z.object({
   slug: z.string().min(3).max(60).optional(),
-  data: z.record(z.any()).optional(),
+  data: z.unknown().optional(),
   status: statusSchema.optional(),
-});
+}).strict();
 
 router.put(
   "/:id",
   verifyToken,
+  requireVerifiedCustomer,
+  createAiWriteRateLimit("invite-update", {
+    when: (req) => req.body?.data !== undefined || req.body?.status === "published",
+  }),
   validate({ params: z.object({ id: z.string().min(1) }), body: updateInviteSchema }),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -301,7 +329,7 @@ router.put(
     }
 
     const normalizedData = data !== undefined
-      ? asDataRecord(normalizeInviteDataForPersistence(asDataRecord(data)))
+      ? asDataRecord(normalizeInviteDataForPersistence(sanitizeJsonRecord(data)))
       : undefined;
     const dataWithTranslationState = normalizedData
       ? (markInviteDataTranslationsStale(normalizedData) as Prisma.InputJsonValue)
@@ -348,6 +376,7 @@ router.put(
 router.delete(
   "/:id",
   verifyToken,
+  requireVerifiedCustomer,
   validate({ params: z.object({ id: z.string().min(1) }) }),
   asyncHandler(async (req, res) => {
     const invite = await prisma.invite.findFirst({

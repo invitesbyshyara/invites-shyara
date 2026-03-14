@@ -8,22 +8,23 @@ import InviteForm from '@/components/InviteForm';
 
 const CreateInvite = () => {
   const { inviteId } = useParams<{ inviteId: string }>();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const [invite, setInvite] = useState<Invite | null>(null);
   const [config, setConfig] = useState<TemplateConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (isLoading) { return; }
     if (!isAuthenticated) { navigate('/login'); return; }
     if (!inviteId) return;
     api.getInvite(inviteId).then(inv => {
       setInvite(inv);
       setConfig(getTemplateBySlug(inv.templateSlug) || null);
     }).finally(() => setLoading(false));
-  }, [inviteId, isAuthenticated, navigate]);
+  }, [inviteId, isAuthenticated, isLoading, navigate]);
 
-  if (loading || !invite || !config) {
+  if (isLoading || loading || !invite || !config) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />

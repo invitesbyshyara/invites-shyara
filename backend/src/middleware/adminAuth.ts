@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { AdminRole } from "@prisma/client";
+import { ADMIN_ACCESS_COOKIE } from "../lib/cookies";
 import { prisma } from "../lib/prisma";
 import { verifyAdminTokenValue } from "../lib/jwt";
 import { isBlacklisted } from "../lib/tokenBlacklist";
@@ -34,15 +35,13 @@ export type PermissionAction =
 
 export const verifyAdminToken = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const token = req.cookies?.[ADMIN_ACCESS_COOKIE] as string | undefined;
+    if (!token) {
       return sendError(res, "Unauthorized", 401);
     }
-
-    const token = authHeader.slice(7);
     const payload = verifyAdminTokenValue(token);
 
-    if (isBlacklisted(payload.jti)) {
+    if (await isBlacklisted(payload.jti)) {
       return sendError(res, "Unauthorized", 401);
     }
 

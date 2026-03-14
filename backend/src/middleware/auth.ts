@@ -1,16 +1,15 @@
 import { NextFunction, Request, Response } from "express";
+import { CUSTOMER_ACCESS_COOKIE } from "../lib/cookies";
 import { prisma } from "../lib/prisma";
 import { verifyAccessToken } from "../lib/jwt";
 import { sendError } from "../utils/http";
 
 export const verifyToken = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const token = req.cookies?.[CUSTOMER_ACCESS_COOKIE] as string | undefined;
+    if (!token) {
       return sendError(res, "Unauthorized", 401);
     }
-
-    const token = authHeader.slice(7);
     const payload = verifyAccessToken(token);
 
     const user = await prisma.user.findUnique({ where: { id: payload.userId } });

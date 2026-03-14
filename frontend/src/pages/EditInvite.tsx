@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const EditInvite = () => {
   const { inviteId } = useParams<{ inviteId: string }>();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [invite, setInvite] = useState<Invite | null>(null);
@@ -21,6 +21,7 @@ const EditInvite = () => {
   const [requestingAccess, setRequestingAccess] = useState(false);
 
   useEffect(() => {
+    if (isLoading) { return; }
     if (!isAuthenticated) { navigate('/login'); return; }
     if (!inviteId) return;
     api.getInviteWorkspace(inviteId)
@@ -33,7 +34,7 @@ const EditInvite = () => {
         }
       })
       .finally(() => setLoading(false));
-  }, [inviteId, isAuthenticated, navigate]);
+  }, [inviteId, isAuthenticated, isLoading, navigate]);
 
   const requestAccess = async () => {
     if (!inviteId) return;
@@ -50,7 +51,7 @@ const EditInvite = () => {
     }
   };
 
-  if (loading) {
+  if (isLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />

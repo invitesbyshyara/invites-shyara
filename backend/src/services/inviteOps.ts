@@ -1,5 +1,7 @@
 import { Prisma, RsvpResponse } from "@prisma/client";
+import { sanitizeJsonRecord } from "../lib/json";
 import { prisma } from "../lib/prisma";
+import { sanitizePlainText, sanitizeTextList } from "../lib/sanitize";
 
 export const COLLABORATOR_PERMISSIONS = [
   "edit_content",
@@ -68,23 +70,7 @@ const normalizeBoolean = (value: unknown, fallback: boolean) =>
   typeof value === "boolean" ? value : fallback;
 
 const sanitizeStringList = (value: unknown, maxItems: number, maxLength: number) => {
-  if (!Array.isArray(value)) {
-    return [] as string[];
-  }
-
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  value.forEach((entry) => {
-    const candidate = String(entry ?? "").trim().slice(0, maxLength);
-    if (!candidate) return;
-    const key = candidate.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    result.push(candidate);
-  });
-
-  return result.slice(0, maxItems);
+  return sanitizeTextList(value, maxItems, maxLength);
 };
 
 const clampGuestCount = (value: unknown) => {
@@ -108,7 +94,7 @@ const normalizeQuestionTranslations = (value: unknown) => {
 
   const translations = Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
-      .map(([language, entry]) => [language, String(entry ?? "").trim()])
+      .map(([language, entry]) => [language, sanitizePlainText(entry, { maxLength: 120 })])
       .filter(([, entry]) => entry.length > 0)
   );
 
@@ -126,8 +112,8 @@ const normalizeCustomQuestions = (value: unknown) => {
       : "text";
 
     return {
-      id: String(raw.id ?? `question_${index + 1}`).trim().slice(0, 50) || `question_${index + 1}`,
-      label: String(raw.label ?? `Question ${index + 1}`).trim().slice(0, 80) || `Question ${index + 1}`,
+      id: sanitizePlainText(raw.id ?? `question_${index + 1}`, { maxLength: 50 }) || `question_${index + 1}`,
+      label: sanitizePlainText(raw.label ?? `Question ${index + 1}`, { maxLength: 80 }) || `Question ${index + 1}`,
       type,
       required: raw.required === true,
       options: type === "select" ? sanitizeStringList(raw.options, 6, 50) : undefined,
@@ -263,7 +249,7 @@ export const mergeInviteData = (
 };
 
 export const normalizeInviteDataForPersistence = (data: Record<string, unknown>): Prisma.InputJsonValue => {
-  const next = { ...data };
+  const next = { ...sanitizeJsonRecord(data) };
   delete next.mealOptions;
   delete next.rsvpDeadline;
 

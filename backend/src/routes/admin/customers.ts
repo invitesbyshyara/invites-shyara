@@ -4,6 +4,7 @@ import { Prisma, UserPlan, UserStatus } from "@prisma/client";
 import { z } from "zod";
 import { logAudit } from "../../lib/audit";
 import { prisma } from "../../lib/prisma";
+import { sanitizeEmail, sanitizeOptionalText, sanitizePlainText } from "../../lib/sanitize";
 import { requirePermission, verifyAdminToken } from "../../middleware/adminAuth";
 import { validate } from "../../middleware/validate";
 import { AppError, asyncHandler, createPagination, parsePagination, sendSuccess } from "../../utils/http";
@@ -96,11 +97,12 @@ router.post(
   validate({ body: createCustomerSchema }),
   asyncHandler(async (req, res) => {
     const passwordHash = await bcrypt.hash(req.body.password, 12);
+    const email = sanitizeEmail(req.body.email);
 
     const user = await prisma.user.create({
       data: {
-        name: req.body.name,
-        email: req.body.email.toLowerCase(),
+        name: sanitizePlainText(req.body.name, { maxLength: 100 }),
+        email,
         passwordHash,
         plan: req.body.plan ?? "free",
       },
@@ -177,9 +179,9 @@ router.put(
     const updated = await prisma.user.update({
       where: { id: req.params.id },
       data: {
-        ...(req.body.name !== undefined ? { name: req.body.name } : {}),
-        ...(req.body.email !== undefined ? { email: req.body.email.toLowerCase() } : {}),
-        ...(req.body.phone !== undefined ? { phone: req.body.phone } : {}),
+        ...(req.body.name !== undefined ? { name: sanitizePlainText(req.body.name, { maxLength: 100 }) } : {}),
+        ...(req.body.email !== undefined ? { email: sanitizeEmail(req.body.email) } : {}),
+        ...(req.body.phone !== undefined ? { phone: sanitizeOptionalText(req.body.phone, { maxLength: 20 }) } : {}),
         ...(req.body.plan !== undefined ? { plan: req.body.plan } : {}),
         ...(req.body.status !== undefined ? { status: req.body.status } : {}),
       },
@@ -214,6 +216,7 @@ router.post(
   requirePermission("suspend_customer"),
   validate({ params: z.object({ id: z.string().min(1) }), body: suspendSchema }),
   asyncHandler(async (req, res) => {
+    const reason = req.body.reason ? sanitizePlainText(req.body.reason, { maxLength: 500 }) : undefined;
     const user = await prisma.user.update({
       where: { id: req.params.id },
       data: { status: "suspended" },
@@ -223,7 +226,7 @@ router.post(
       data: {
         entityId: req.params.id,
         entityType: "customer",
-        note: req.body.reason ? `Suspended: ${req.body.reason}` : "Account suspended",
+        note: reason ? `Suspended: ${reason}` : "Account suspended",
         createdById: req.admin!.id,
       },
     });
@@ -233,7 +236,7 @@ router.post(
       action: "SUSPEND_USER",
       entityType: "user",
       entityId: req.params.id,
-      details: req.body.reason ? { reason: req.body.reason } : undefined,
+      details: reason ? { reason } : undefined,
     });
 
     return sendSuccess(res, user);
@@ -281,7 +284,8 @@ router.post(
   validate({ params: z.object({ id: z.string().min(1) }), body: unlockSchema }),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { templateSlug, reason } = req.body;
+    const { templateSlug } = req.body;
+    const reason = sanitizePlainText(req.body.reason, { maxLength: 500 });
 
     const template = await prisma.template.findUnique({ where: { slug: templateSlug } });
     if (!template) {

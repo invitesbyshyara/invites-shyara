@@ -9,6 +9,18 @@ import { asyncHandler, sendSuccess } from "../../utils/http";
 const router = Router();
 router.use(verifyAdminToken);
 
+const updateSettingsSchema = z
+  .object({
+    currency: z.enum(["USD", "EUR"]).optional(),
+    maintenance_mode: z.boolean().optional(),
+    allow_google_auth: z.boolean().optional(),
+    allow_email_auth: z.boolean().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "Provide at least one supported setting to update.",
+  });
+
 router.get(
   "/",
   requirePermission("manage_settings"),
@@ -19,14 +31,12 @@ router.get(
   }),
 );
 
-const updateSettingsSchema = z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]));
-
 router.put(
   "/",
   requirePermission("manage_settings"),
   validate({ body: updateSettingsSchema }),
   asyncHandler(async (req, res) => {
-    const entries = Object.entries(req.body as Record<string, unknown>);
+    const entries = Object.entries(req.body as Record<string, string | boolean>);
 
     await prisma.$transaction(
       entries.map(([key, value]) =>
@@ -34,10 +44,10 @@ router.put(
           where: { key },
           create: {
             key,
-            value: value === null ? "" : String(value),
+            value: String(value),
           },
           update: {
-            value: value === null ? "" : String(value),
+            value: String(value),
           },
         }),
       ),

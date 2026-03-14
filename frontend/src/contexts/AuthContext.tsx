@@ -6,10 +6,18 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<
+    | { requiresMfa: true; challengeId: string; user: Pick<User, 'id' | 'name' | 'email' | 'emailVerified' | 'mfaEnabled'> }
+    | { user: User }
+  >;
   register: (name: string, email: string, password: string) => Promise<void>;
-  googleLogin: (accessToken: string) => Promise<void>;
+  googleLogin: (accessToken: string) => Promise<
+    | { requiresMfa: true; challengeId: string; user: Pick<User, 'id' | 'name' | 'email' | 'emailVerified' | 'mfaEnabled'> }
+    | { user: User }
+  >;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<User | null>;
+  setUser: (user: User | null) => void;
   pendingTemplateSlug: string | null;
   setPendingTemplateSlug: (slug: string | null) => void;
 }
@@ -17,12 +25,13 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(() => api.getCachedUser());
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(() => api.hasStoredSession());
   const [pendingTemplateSlug, setPendingTemplateSlug] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!api.hasStoredSession() && !user) {
+    if (!api.hasStoredSession()) {
+      setIsLoading(false);
       return;
     }
 
@@ -57,7 +66,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     try {
       const result = await api.login(email, password);
-      setUser(result.user);
+      if (!('requiresMfa' in result && result.requiresMfa)) {
+        setUser(result.user);
+      }
+      return result;
     } finally {
       setIsLoading(false);
     }
@@ -77,7 +89,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     try {
       const result = await api.googleAuth(accessToken);
-      setUser(result.user);
+      if (!('requiresMfa' in result && result.requiresMfa)) {
+        setUser(result.user);
+      }
+      return result;
     } finally {
       setIsLoading(false);
     }
@@ -87,6 +102,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await api.logout();
     setUser(null);
     setPendingTemplateSlug(null);
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!api.hasStoredSession()) {
+      setUser(null);
+      return null;
+    }
+
+    const profile = await api.getMe();
+    setUser(profile);
+    return profile;
   }, []);
 
   return (
@@ -99,6 +125,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         register,
         googleLogin,
         logout,
+        refreshUser,
+        setUser,
         pendingTemplateSlug,
         setPendingTemplateSlug,
       }}

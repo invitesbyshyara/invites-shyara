@@ -13,6 +13,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   FRONTEND_URL: z.string().url(),
   ADMIN_PORTAL_URL: z.string().url().optional(),
+  API_PUBLIC_URL: z.string().url().optional(),
   CUSTOMER_ACQUISITION_LOCK_ENABLED: booleanFromEnv,
 
   DATABASE_URL: z.string().min(1),
@@ -39,6 +40,8 @@ const envSchema = z.object({
 
   GEMINI_API_KEY: z.string().min(1).optional(),
   GEMINI_TRANSLATION_MODEL: z.string().min(1).default("gemini-2.5-flash"),
+  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

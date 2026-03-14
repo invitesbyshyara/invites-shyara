@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const RsvpManagement = () => {
   const { inviteId } = useParams<{ inviteId: string }>();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [invite, setInvite] = useState<Invite | null>(null);
@@ -25,6 +25,9 @@ const RsvpManagement = () => {
   const [requestingAccess, setRequestingAccess] = useState(false);
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
     if (!isAuthenticated) {
       navigate("/login");
       return;
@@ -50,7 +53,7 @@ const RsvpManagement = () => {
         }
       })
       .finally(() => setLoading(false));
-  }, [inviteId, isAuthenticated, navigate]);
+  }, [authLoading, inviteId, isAuthenticated, navigate]);
 
   const requestAccess = async () => {
     if (!inviteId) return;

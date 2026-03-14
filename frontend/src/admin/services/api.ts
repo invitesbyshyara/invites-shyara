@@ -4,23 +4,77 @@ import {
   ActivityLogEntry, InternalNote, DashboardStats, GlobalSearchResult,
   AdminUser,
 } from '../types';
+import { buildCanonicalApiBase } from '@/lib/apiBase';
 
 // ─── Config ──────────────────────────────────────────────────────
 
-const TOKEN_KEY = 'shyara_admin_token';
-const apiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? 'http://localhost:3000';
-const API_BASE = apiUrl.endsWith('/api') ? `${apiUrl}/admin` : `${apiUrl}/api/admin`;
+const ADMIN_CSRF_COOKIE = 'adminCsrfToken';
+const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? 'http://localhost:3000';
+const API_BASE = `${buildCanonicalApiBase(configuredApiUrl)}/admin`;
 
 // ─── Token helpers ────────────────────────────────────────────────
 
-const getToken = () => sessionStorage.getItem(TOKEN_KEY);
-const setToken = (t: string) => sessionStorage.setItem(TOKEN_KEY, t);
-export const clearAdminToken = () => sessionStorage.removeItem(TOKEN_KEY);
+const getCookie = (name: string) => {
+  if (typeof document === 'undefined') {
+    return undefined;
+  }
+  const match = document.cookie
+    .split('; ')
+    .find((entry) => entry.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : undefined;
+};
+
+export const hasAdminSessionCookie = () => Boolean(getCookie(ADMIN_CSRF_COOKIE));
 
 // ─── Core request ────────────────────────────────────────────────
 
 type ApiResponse<T> = { success: boolean; data: T; error?: string; pagination?: Pagination };
 type Pagination = { page: number; limit: number; total: number; totalPages: number };
+type AdminAuthResult =
+  | {
+      requiresMfa: true;
+      requiresMfaSetup?: false;
+      challengeId: string;
+      admin: { id: string; name: string; email: string; role: string };
+    }
+  | {
+      requiresMfa?: false;
+      requiresMfaSetup: true;
+      challengeId: string;
+      admin: { id: string; name: string; email: string; role: string };
+    }
+  | {
+      admin: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+        createdAt?: string;
+        lastLoginAt?: string | null;
+        mfaEnabled?: boolean;
+        recoveryCodesRemaining?: number;
+      };
+    };
+
+const mapAdmin = (admin: {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  createdAt?: string;
+  lastLoginAt?: string | null;
+  mfaEnabled?: boolean;
+  recoveryCodesRemaining?: number;
+}): AdminUser => ({
+  id: admin.id,
+  name: admin.name,
+  email: admin.email,
+  role: admin.role as 'admin' | 'support',
+  createdAt: admin.createdAt,
+  lastLoginAt: admin.lastLoginAt,
+  mfaEnabled: admin.mfaEnabled,
+  recoveryCodesRemaining: admin.recoveryCodesRemaining,
+});
 
 const request = async <T>(
   path: string,
@@ -32,11 +86,11 @@ const request = async <T>(
   if (body && !(body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  if (requiresAuth) {
-    const token = getToken();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (requiresAuth && !['GET', 'HEAD', 'OPTIONS'].includes((options.method ?? 'GET').toUpperCase())) {
+    const csrfToken = getCookie(ADMIN_CSRF_COOKIE);
+    if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
   }
-  const res = await fetch(`${API_BASE}${path}`, { ...options, body, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...options, body, headers, credentials: 'include' });
   const text = await res.text();
   if (!text) throw new Error('Empty response');
   const payload: ApiResponse<T> = JSON.parse(text);
@@ -171,22 +225,103 @@ const mapNote = (n: Record<string, unknown>): InternalNote => ({
 export const adminApi = {
 
   // Auth
-  login: async (email: string, password: string): Promise<AdminUser> => {
-    const result = await r<{ token: string; admin: { id: string; name: string; email: string; role: string } }>(
+  login: async (email: string, password: string): Promise<
+    | { requiresMfa: true; challengeId: string; admin: AdminUser }
+    | { requiresMfaSetup: true; challengeId: string; admin: AdminUser }
+    | { admin: AdminUser }
+  > => {
+    const result = await r<AdminAuthResult>(
       '/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }, false,
     );
-    setToken(result.token);
-    return { id: result.admin.id, name: result.admin.name, email: result.admin.email, role: result.admin.role as 'admin' | 'support' };
+    if ('requiresMfa' in result && result.requiresMfa) {
+      return { requiresMfa: true, challengeId: result.challengeId, admin: mapAdmin(result.admin) };
+    }
+    if ('requiresMfaSetup' in result && result.requiresMfaSetup) {
+      return { requiresMfaSetup: true, challengeId: result.challengeId, admin: mapAdmin(result.admin) };
+    }
+    return { admin: mapAdmin(result.admin) };
   },
 
   logout: async () => {
-    try { await r<{ message: string }>('/auth/logout', { method: 'POST' }); } finally { clearAdminToken(); }
+    await r<{ message: string }>('/auth/logout', { method: 'POST' });
   },
 
   me: async (): Promise<AdminUser> => {
-    const a = await r<{ id: string; name: string; email: string; role: string }>('/auth/me');
-    return { id: a.id, name: a.name, email: a.email, role: a.role as 'admin' | 'support' };
+    const a = await r<{
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+      createdAt?: string;
+      lastLoginAt?: string | null;
+      mfaEnabled?: boolean;
+      recoveryCodesRemaining?: number;
+    }>('/auth/me');
+    return mapAdmin(a);
   },
+
+  getMfaStatus: async () =>
+    r<{ enabled: boolean; recoveryCodesRemaining: number }>('/auth/mfa/status'),
+
+  beginMfaEnrollment: async (challengeId: string) =>
+    r<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string }>(
+      '/auth/mfa/enroll',
+      { method: 'POST', body: JSON.stringify({ challengeId }) },
+      false,
+    ),
+
+  verifyMfaEnrollment: async (challengeId: string, code: string) => {
+    const result = await r<{
+      admin: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+        createdAt?: string;
+        lastLoginAt?: string | null;
+        mfaEnabled?: boolean;
+        recoveryCodesRemaining?: number;
+      };
+      recoveryCodes: string[];
+    }>(
+      '/auth/mfa/verify',
+      { method: 'POST', body: JSON.stringify({ challengeId, code }) },
+      false,
+    );
+    return { admin: mapAdmin(result.admin), recoveryCodes: result.recoveryCodes };
+  },
+
+  completeMfaLogin: async (challengeId: string, input: { code?: string; recoveryCode?: string }) => {
+    const result = await r<{
+      admin: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+        createdAt?: string;
+        lastLoginAt?: string | null;
+        mfaEnabled?: boolean;
+        recoveryCodesRemaining?: number;
+      };
+    }>(
+      '/auth/mfa/complete-login',
+      { method: 'POST', body: JSON.stringify({ challengeId, ...input }) },
+      false,
+    );
+    return { admin: mapAdmin(result.admin) };
+  },
+
+  rotateMfaRecoveryCodes: async (input: { code?: string; recoveryCode?: string }) =>
+    r<{ recoveryCodes: string[] }>(
+      '/auth/mfa/recovery-codes/rotate',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
+
+  disableMfa: async (input: { code?: string; recoveryCode?: string }) =>
+    r<{ message: string }>(
+      '/auth/mfa/disable',
+      { method: 'POST', body: JSON.stringify(input) },
+    ),
 
   // Dashboard
   getOverview: async (): Promise<DashboardStats> => {
@@ -477,8 +612,16 @@ export const adminApi = {
     };
   },
 
-  updateSettings: async (data: Record<string, string | number | boolean | null>) =>
-    r<Record<string, string>>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  updateSettings: async (data: AdminSettings) =>
+    r<Record<string, string>>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        currency: data.currency,
+        maintenance_mode: data.maintenanceMode,
+        allow_google_auth: data.featureFlags.find((flag) => flag.id === 'google_auth')?.enabled ?? true,
+        allow_email_auth: data.featureFlags.find((flag) => flag.id === 'email_auth')?.enabled ?? true,
+      }),
+    }),
 
   // Search
   globalSearch: async (query: string): Promise<GlobalSearchResult> =>
@@ -510,5 +653,29 @@ export const adminApi = {
     q.set('limit', String(params?.limit ?? 20));
     const { data, pagination } = await rPaged<Record<string, unknown>[]>(`/audit-logs?${q.toString()}`);
     return { logs: data, pagination };
+  },
+
+  // Security Events
+  getSecurityEvents: async (params?: {
+    userId?: string;
+    eventType?: string;
+    outcome?: string;
+    ipAddress?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.userId) q.set('userId', params.userId);
+    if (params?.eventType) q.set('eventType', params.eventType);
+    if (params?.outcome) q.set('outcome', params.outcome);
+    if (params?.ipAddress) q.set('ipAddress', params.ipAddress);
+    if (params?.from) q.set('from', params.from);
+    if (params?.to) q.set('to', params.to);
+    q.set('page', String(params?.page ?? 1));
+    q.set('limit', String(params?.limit ?? 25));
+    const { data, pagination } = await rPaged<Record<string, unknown>[]>(`/security-events?${q.toString()}`);
+    return { events: data, pagination };
   },
 };

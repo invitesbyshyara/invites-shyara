@@ -1,13 +1,29 @@
 import { NextFunction, Request, Response } from "express";
+import { env } from "../lib/env";
+
+export type FieldError = {
+  field: string;
+  message: string;
+};
+
+type AppErrorOptions = {
+  code?: string;
+  details?: unknown;
+  fields?: FieldError[];
+};
 
 export class AppError extends Error {
   public readonly statusCode: number;
+  public readonly code?: string;
   public readonly details?: unknown;
+  public readonly fields?: FieldError[];
 
-  constructor(message: string, statusCode = 400, details?: unknown) {
+  constructor(message: string, statusCode = 400, options?: AppErrorOptions) {
     super(message);
     this.statusCode = statusCode;
-    this.details = details;
+    this.code = options?.code;
+    this.details = options?.details;
+    this.fields = options?.fields;
   }
 }
 
@@ -35,11 +51,35 @@ export const sendError = (
   error: string,
   statusCode = 400,
   details?: unknown,
+  code?: string,
 ): Response =>
   res.status(statusCode).json({
     success: false,
     error,
-    ...(details ? { details } : {}),
+    ...(code ? { code } : {}),
+    ...(res.req.requestId ? { requestId: res.req.requestId } : {}),
+    ...(Array.isArray(details) &&
+    details.every(
+      (entry) =>
+        entry &&
+        typeof entry === "object" &&
+        "field" in entry &&
+        "message" in entry,
+    )
+      ? { fields: details }
+      : {}),
+    ...(details !== undefined &&
+    (!Array.isArray(details) ||
+      !details.every(
+        (entry) =>
+          entry &&
+          typeof entry === "object" &&
+          "field" in entry &&
+          "message" in entry,
+      )) &&
+    env.NODE_ENV !== "production"
+      ? { details }
+      : {}),
   });
 
 export const parsePagination = (req: Request) => {

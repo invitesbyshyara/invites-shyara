@@ -8,7 +8,9 @@ import {
   ExternalLink,
   Globe2,
   Hotel,
+  Languages,
   ListChecks,
+  Loader2,
   Mail,
   Pencil,
   Plane,
@@ -50,6 +52,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { getInviteHeadline } from "@/utils/invite";
+import { translateText } from "@/utils/translate";
 
 const availableLanguages = [
   { code: "en", label: "English" },
@@ -80,6 +83,23 @@ const broadcastTypes: Array<{ value: InviteBroadcast["type"]; label: string }> =
 ];
 
 const responseOptions = ["yes", "no", "maybe", "pending"] as const;
+const MAX_MEAL_OPTIONS = 8;
+
+const normalizeMealOptions = (options: string[]) => {
+  const seen = new Set<string>();
+
+  return options.reduce<string[]>((result, option) => {
+    const trimmed = option.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) {
+      return result;
+    }
+
+    seen.add(key);
+    result.push(trimmed);
+    return result;
+  }, []).slice(0, MAX_MEAL_OPTIONS);
+};
 
 const emptyGuest = (): Partial<InviteGuest> & { name: string } => ({
   name: "",
@@ -170,7 +190,7 @@ const emptySummary = {
 
 const InviteOperations = () => {
   const { inviteId = "" } = useParams<{ inviteId: string }>();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -183,8 +203,14 @@ const InviteOperations = () => {
   const [savingCollaborator, setSavingCollaborator] = useState(false);
   const [savingLanguageSetup, setSavingLanguageSetup] = useState(false);
   const [loadingExportPack, setLoadingExportPack] = useState(false);
+  const [autoTranslatingLang, setAutoTranslatingLang] = useState<string | null>(null);
+  const [autoTranslateProgress, setAutoTranslateProgress] = useState<{ done: number; total: number } | null>(null);
+  const [translatingFieldKey, setTranslatingFieldKey] = useState<string | null>(null);
   const [editingGuestId, setEditingGuestId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null);
   const [guestSearch, setGuestSearch] = useState("");
+  const [mealOptionDraft, setMealOptionDraft] = useState("");
   const [guestForm, setGuestForm] = useState<Partial<InviteGuest> & { name: string }>(emptyGuest());
   const [broadcastForm, setBroadcastForm] = useState(emptyBroadcast());
   const [collaboratorForm, setCollaboratorForm] = useState<Pick<InviteCollaborator, "email" | "name" | "roleLabel" | "permissions">>({
@@ -198,6 +224,9 @@ const InviteOperations = () => {
   const [exportPack, setExportPack] = useState<{ generatedAt: string; files: Array<{ filename: string; content: string }> } | null>(null);
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
     if (!isAuthenticated) {
       navigate("/login");
       return;
@@ -246,7 +275,7 @@ const InviteOperations = () => {
     return () => {
       mounted = false;
     };
-  }, [inviteId, isAuthenticated, navigate, toast]);
+  }, [authLoading, inviteId, isAuthenticated, navigate, toast]);
 
   const refreshWorkspace = async () => {
     const response = await api.getInviteWorkspace(inviteId);
@@ -272,13 +301,17 @@ const InviteOperations = () => {
   const canViewReports = canUse(["view_reports"]);
   const availableGuestLanguages = localizationForm?.enabledLanguages ?? workspace?.availableLanguages ?? [];
   const defaultGuestLanguage = localizationForm?.defaultLanguage ?? workspace?.defaultLanguage ?? "en";
+  const configuredMealOptions = useMemo(
+    () => normalizeMealOptions(rsvpForm?.mealOptions ?? []),
+    [rsvpForm?.mealOptions]
+  );
   const availableMealOptions = useMemo(() => {
-    const options = rsvpForm?.mealOptions ?? [];
+    const options = configuredMealOptions;
     if (guestForm.mealChoice && !options.includes(guestForm.mealChoice)) {
       return [...options, guestForm.mealChoice];
     }
     return options;
-  }, [guestForm.mealChoice, rsvpForm?.mealOptions]);
+  }, [configuredMealOptions, guestForm.mealChoice]);
 
   const segments = useMemo(() => {
     const values = new Set(["general", "family", "vip", "vendors"]);
@@ -376,6 +409,37 @@ const InviteOperations = () => {
     });
   };
 
+  const addMealOption = () => {
+    const nextOption = mealOptionDraft.trim();
+    if (!nextOption) {
+      toast({ title: "Enter a meal option first", variant: "destructive" });
+      return;
+    }
+
+    if (configuredMealOptions.length >= MAX_MEAL_OPTIONS) {
+      toast({ title: `You can add up to ${MAX_MEAL_OPTIONS} meal options`, variant: "destructive" });
+      return;
+    }
+
+    if (configuredMealOptions.some((option) => option.toLowerCase() === nextOption.toLowerCase())) {
+      toast({ title: "That meal option already exists", variant: "destructive" });
+      return;
+    }
+
+    setRsvpForm((current) => current ? {
+      ...current,
+      mealOptions: [...configuredMealOptions, nextOption],
+    } : current);
+    setMealOptionDraft("");
+  };
+
+  const removeMealOption = (optionToRemove: string) => {
+    setRsvpForm((current) => current ? {
+      ...current,
+      mealOptions: current.mealOptions.filter((option) => option.trim().toLowerCase() !== optionToRemove.toLowerCase()),
+    } : current);
+  };
+
   const updateGuestForm = <K extends keyof InviteGuest | keyof ReturnType<typeof emptyGuest>,>(key: K, value: unknown) => {
     setGuestForm((current) => ({ ...current, [key]: value }));
   };
@@ -447,6 +511,8 @@ const InviteOperations = () => {
   };
 
   const removeGuest = async (guestId: string) => {
+    if (removingId) return;
+    setRemovingId(guestId);
     try {
       await api.deleteInviteGuest(inviteId, guestId);
       await refreshWorkspace();
@@ -454,18 +520,26 @@ const InviteOperations = () => {
       toast({ title: "Guest removed" });
     } catch {
       toast({ title: "Could not remove guest", variant: "destructive" });
+    } finally {
+      setRemovingId(null);
     }
   };
 
   const saveRsvpSetup = async () => {
     if (!rsvpForm) return;
 
+    const mealOptions = normalizeMealOptions(rsvpForm.mealOptions);
+    if (rsvpForm.collectMealChoice && mealOptions.length === 0) {
+      toast({ title: "Add at least one meal option to collect meal choices", variant: "destructive" });
+      return;
+    }
+
     setSavingConfig(true);
     try {
       await api.updateInviteRsvpSettings(inviteId, {
         ...rsvpForm,
         maxGuestCount: rsvpForm.maxGuestCount ? Math.max(1, Math.min(9999, Number(rsvpForm.maxGuestCount) || 1)) : undefined,
-        mealOptions: rsvpForm.mealOptions.map((item) => item.trim()).filter(Boolean).slice(0, 8),
+        mealOptions,
         customQuestions: rsvpForm.customQuestions.slice(0, 6),
       });
       await refreshWorkspace();
@@ -495,6 +569,11 @@ const InviteOperations = () => {
   const sendBroadcast = async () => {
     if (!broadcastForm.title.trim() || !broadcastForm.message.trim()) {
       toast({ title: "Add a title and message", variant: "destructive" });
+      return;
+    }
+
+    if (estimatedBroadcastRecipients.length === 0) {
+      toast({ title: "No recipients match the selected filters", variant: "destructive" });
       return;
     }
 
@@ -549,12 +628,16 @@ const InviteOperations = () => {
   };
 
   const removeCollaborator = async (collaboratorId: string) => {
+    if (removingId) return;
+    setRemovingId(collaboratorId);
     try {
       await api.removeCollaborator(inviteId, collaboratorId);
       await refreshWorkspace();
       toast({ title: "Collaborator removed" });
     } catch {
       toast({ title: "Could not remove collaborator", variant: "destructive" });
+    } finally {
+      setRemovingId(null);
     }
   };
 
@@ -575,22 +658,30 @@ const InviteOperations = () => {
   };
 
   const approveAccessRequest = async (accessRequestId: string) => {
+    if (resolvingRequestId) return;
+    setResolvingRequestId(accessRequestId);
     try {
       await api.approveInviteAccessRequest(inviteId, accessRequestId);
       await refreshWorkspace();
       toast({ title: "Access request approved" });
     } catch {
       toast({ title: "Could not approve access request", variant: "destructive" });
+    } finally {
+      setResolvingRequestId(null);
     }
   };
 
   const rejectAccessRequest = async (accessRequestId: string) => {
+    if (resolvingRequestId) return;
+    setResolvingRequestId(accessRequestId);
     try {
       await api.rejectInviteAccessRequest(inviteId, accessRequestId);
       await refreshWorkspace();
       toast({ title: "Access request rejected" });
     } catch {
       toast({ title: "Could not reject access request", variant: "destructive" });
+    } finally {
+      setResolvingRequestId(null);
     }
   };
 
@@ -675,6 +766,41 @@ const InviteOperations = () => {
         },
       };
     });
+  };
+
+  const translateOneField = async (language: string, fieldKey: string, fieldValue: string) => {
+    const sourceLang = localizationForm?.defaultLanguage ?? "en";
+    setTranslatingFieldKey(`${language}:${fieldKey}`);
+    try {
+      const translated = await translateText(fieldValue, sourceLang, language);
+      setTranslationValue(language, fieldKey, translated);
+    } finally {
+      setTranslatingFieldKey(null);
+    }
+  };
+
+  const autoTranslateLanguage = async (language: string) => {
+    if (!localizationForm || autoTranslatingLang) return;
+    const sourceLang = localizationForm.defaultLanguage ?? "en";
+    // Only translate fields with meaningful content (more than 3 words)
+    const fieldsToTranslate = translatableFields.filter(
+      (field) => field.value.split(/\s+/).length > 3
+    );
+    if (fieldsToTranslate.length === 0) {
+      toast({ title: "No fields with enough content to auto-translate", variant: "destructive" });
+      return;
+    }
+    setAutoTranslatingLang(language);
+    setAutoTranslateProgress({ done: 0, total: fieldsToTranslate.length });
+    for (let i = 0; i < fieldsToTranslate.length; i++) {
+      const field = fieldsToTranslate[i];
+      const translated = await translateText(field.value, sourceLang, language);
+      setTranslationValue(language, field.key, translated);
+      setAutoTranslateProgress({ done: i + 1, total: fieldsToTranslate.length });
+    }
+    setAutoTranslatingLang(null);
+    setAutoTranslateProgress(null);
+    toast({ title: `${fieldsToTranslate.length} fields auto-translated to ${availableLanguages.find((l) => l.code === language)?.label ?? language}` });
   };
 
   const setQuestionTranslation = (questionIndex: number, language: string, value: string) => {
@@ -877,19 +1003,58 @@ const InviteOperations = () => {
                     }
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Meal options</Label>
-                  <Input
-                    disabled={!canEditInviteSetup}
-                    placeholder="Vegetarian, Non-veg, Kids meal"
-                    value={rsvpForm.mealOptions.join(", ")}
-                    onChange={(event) =>
-                      setRsvpForm((current) => current ? {
-                        ...current,
-                        mealOptions: event.target.value.split(",").map((item) => item.trim()).filter(Boolean),
-                      } : current)
-                    }
-                  />
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Meal options</Label>
+                    <span className="text-xs text-muted-foreground">{configuredMealOptions.length}/{MAX_MEAL_OPTIONS}</span>
+                  </div>
+                  <div className="flex flex-col gap-2 lg:flex-row">
+                    <Input
+                      disabled={!canEditInviteSetup || configuredMealOptions.length >= MAX_MEAL_OPTIONS}
+                      placeholder="Add a meal option"
+                      value={mealOptionDraft}
+                      onChange={(event) => setMealOptionDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addMealOption();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!canEditInviteSetup || configuredMealOptions.length >= MAX_MEAL_OPTIONS}
+                      onClick={addMealOption}
+                    >
+                      <Plus className="mr-1 h-4 w-4" />
+                      Add Option
+                    </Button>
+                  </div>
+                  {configuredMealOptions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                      No meal options added yet. Guests will only see a meal picker after you add at least one option.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {configuredMealOptions.map((option) => (
+                        <div key={option} className="flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-sm">
+                          <span>{option}</span>
+                          <button
+                            type="button"
+                            className="text-muted-foreground transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={!canEditInviteSetup}
+                            onClick={() => removeMealOption(option)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Guests will see these as selectable options instead of a text field.
+                  </p>
                 </div>
               </div>
 
@@ -1373,9 +1538,9 @@ const InviteOperations = () => {
                             <Button variant="outline" size="sm" disabled={!canManageGuests} onClick={() => startGuestEdit(guest)}>
                               Edit
                             </Button>
-                            <Button variant="destructive" size="sm" disabled={!canManageGuests} onClick={() => removeGuest(guest.id)}>
+                            <Button variant="destructive" size="sm" disabled={!canManageGuests || removingId === guest.id} onClick={() => removeGuest(guest.id)}>
                               <Trash2 className="mr-1 h-4 w-4" />
-                              Remove
+                              {removingId === guest.id ? "Removing..." : "Remove"}
                             </Button>
                           </div>
                         </div>
@@ -1742,8 +1907,12 @@ const InviteOperations = () => {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <Button size="sm" onClick={() => approveAccessRequest(request.id)}>Approve</Button>
-                            <Button variant="outline" size="sm" onClick={() => rejectAccessRequest(request.id)}>Reject</Button>
+                            <Button size="sm" disabled={resolvingRequestId === request.id} onClick={() => approveAccessRequest(request.id)}>
+                              {resolvingRequestId === request.id ? "Approving..." : "Approve"}
+                            </Button>
+                            <Button variant="outline" size="sm" disabled={resolvingRequestId === request.id} onClick={() => rejectAccessRequest(request.id)}>
+                              {resolvingRequestId === request.id ? "Rejecting..." : "Reject"}
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -1789,8 +1958,8 @@ const InviteOperations = () => {
                               ))}
                             </div>
                           </div>
-                          <Button variant="destructive" size="sm" disabled={!canManageCollaborators} onClick={() => removeCollaborator(collaborator.id)}>
-                            Remove
+                          <Button variant="destructive" size="sm" disabled={!canManageCollaborators || removingId === collaborator.id} onClick={() => removeCollaborator(collaborator.id)}>
+                            {removingId === collaborator.id ? "Removing..." : "Remove"}
                           </Button>
                         </div>
                       </div>
@@ -1993,30 +2162,80 @@ const InviteOperations = () => {
                         Add at least one extra language to enable content translation.
                       </div>
                     ) : (
-                      <div className="space-y-5">
-                        {translatableFields.map((field) => (
-                          <div key={field.key} className="rounded-xl border border-border p-4">
-                            <div className="mb-3">
-                              <p className="font-medium text-foreground">{field.label}</p>
-                              <p className="mt-1 text-xs text-muted-foreground">{field.value}</p>
+                      <>
+                        {/* Per-language auto-translate buttons */}
+                        <div className="flex flex-wrap gap-2">
+                          {secondaryLanguages.map((language) => {
+                            const isTranslatingThis = autoTranslatingLang === language;
+                            const langLabel = availableLanguages.find((item) => item.code === language)?.label ?? language;
+                            return (
+                              <Button
+                                key={language}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1.5 text-xs"
+                                disabled={!canEditInviteSetup || autoTranslatingLang !== null}
+                                onClick={() => void autoTranslateLanguage(language)}
+                              >
+                                {isTranslatingThis ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Translating {autoTranslateProgress?.done}/{autoTranslateProgress?.total}…
+                                  </>
+                                ) : (
+                                  <>
+                                    <Languages className="h-3 w-3" />
+                                    Auto-translate to {langLabel}
+                                  </>
+                                )}
+                              </Button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="space-y-5">
+                          {translatableFields.map((field) => (
+                            <div key={field.key} className="rounded-xl border border-border p-4">
+                              <div className="mb-3">
+                                <p className="font-medium text-foreground">{field.label}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">{field.value}</p>
+                              </div>
+                              <div className="grid gap-4 lg:grid-cols-2">
+                                {secondaryLanguages.map((language) => {
+                                  const isTranslatingThis = translatingFieldKey === `${language}:${field.key}`;
+                                  const langLabel = availableLanguages.find((item) => item.code === language)?.label ?? language;
+                                  return (
+                                    <div key={language} className="space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <Label>{langLabel}</Label>
+                                        <button
+                                          type="button"
+                                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                          disabled={!canEditInviteSetup || isTranslatingThis || autoTranslatingLang !== null}
+                                          onClick={() => void translateOneField(language, field.key, field.value)}
+                                          title={`Translate to ${langLabel}`}
+                                        >
+                                          {isTranslatingThis ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Languages className="h-3 w-3" />
+                                          )}
+                                        </button>
+                                      </div>
+                                      <Textarea
+                                        disabled={!canEditInviteSetup}
+                                        value={String(localizationForm.translations[language]?.[field.key] ?? "")}
+                                        onChange={(event) => setTranslationValue(language, field.key, event.target.value)}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                            <div className="grid gap-4 lg:grid-cols-2">
-                              {secondaryLanguages.map((language) => (
-                                <div key={language} className="space-y-2">
-                                  <Label>
-                                    {availableLanguages.find((item) => item.code === language)?.label ?? language}
-                                  </Label>
-                                  <Textarea
-                                    disabled={!canEditInviteSetup}
-                                    value={String(localizationForm.translations[language]?.[field.key] ?? "")}
-                                    onChange={(event) => setTranslationValue(language, field.key, event.target.value)}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      </>
                     )}
                   </div>
 

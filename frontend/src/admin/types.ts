@@ -5,6 +5,10 @@ export interface AdminUser {
   name: string;
   email: string;
   role: AdminRole;
+  createdAt?: string;
+  lastLoginAt?: string | null;
+  mfaEnabled?: boolean;
+  recoveryCodesRemaining?: number;
 }
 
 export interface AdminCustomer {

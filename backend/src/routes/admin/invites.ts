@@ -3,6 +3,7 @@ import { EventCategory, InviteStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { logAudit } from "../../lib/audit";
 import { prisma } from "../../lib/prisma";
+import { sanitizePlainText } from "../../lib/sanitize";
 import { requirePermission, verifyAdminToken } from "../../middleware/adminAuth";
 import { validate } from "../../middleware/validate";
 import { isInviteSlugAvailable, validateSlugFormat } from "../../services/slug";
@@ -19,11 +20,13 @@ router.get(
       status: z
         .string()
         .optional()
-        .transform((value) => (value ? value.replace(/-/g, "_") : undefined)),
+        .transform((value) => (value ? value.replace(/-/g, "_") : undefined))
+        .pipe(z.nativeEnum(InviteStatus).optional()),
       category: z
         .string()
         .optional()
-        .transform((value) => (value ? value.replace(/-/g, "_") : undefined)),
+        .transform((value) => (value ? value.replace(/-/g, "_") : undefined))
+        .pipe(z.nativeEnum(EventCategory).optional()),
       page: z.coerce.number().int().min(1).default(1),
       limit: z.coerce.number().int().min(1).max(100).default(20),
     }),
@@ -173,6 +176,7 @@ router.post(
   requirePermission("takedown_invite"),
   validate({ params: z.object({ id: z.string().min(1) }), body: reasonSchema }),
   asyncHandler(async (req, res) => {
+    const reason = req.body.reason ? sanitizePlainText(req.body.reason, { maxLength: 500 }) : undefined;
     const invite = await prisma.invite.update({
       where: { id: req.params.id },
       data: { status: "taken_down" },
@@ -182,7 +186,7 @@ router.post(
       data: {
         entityId: invite.id,
         entityType: "invite",
-        note: req.body.reason ? `Taken down: ${req.body.reason}` : "Invite taken down",
+        note: reason ? `Taken down: ${reason}` : "Invite taken down",
         createdById: req.admin!.id,
       },
     });
@@ -192,7 +196,7 @@ router.post(
       action: "TAKEDOWN_INVITE",
       entityType: "invite",
       entityId: invite.id,
-      details: req.body.reason ? { reason: req.body.reason } : undefined,
+      details: reason ? { reason } : undefined,
     });
 
     return sendSuccess(res, invite);

@@ -167,6 +167,25 @@ export const sendWelcomeEmail = async (name: string, email: string) => {
   await send(email, "Welcome to Shyara \u2728", buildEmail(body));
 };
 
+export const sendEmailVerificationEmail = async (email: string, token: string) => {
+  const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${encodeURIComponent(token)}`;
+  const safeUrl = DOMPurify.sanitize(verifyUrl);
+
+  const body = `
+    <h2 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',Times,serif;font-size:22px;font-weight:700;color:#1C1917;line-height:1.3;">
+      Verify your email
+    </h2>
+    <p style="margin:0 0 14px;">
+      Confirm your email address to unlock invite creation, workspace collaboration, and payments.
+    </p>
+    ${btn(safeUrl, "Verify Email ->")}
+    <p style="margin:20px 0 0;font-size:13px;color:#78716C;">
+      This link expires in 24 hours. If you did not create an account, you can ignore this email.
+    </p>`;
+
+  await send(email, "Verify your Shyara email", buildEmail(body));
+};
+
 // ─── Password Reset OTP ───────────────────────────────────────────────────────
 
 export const sendPasswordResetOtpEmail = async (email: string, otp: string) => {

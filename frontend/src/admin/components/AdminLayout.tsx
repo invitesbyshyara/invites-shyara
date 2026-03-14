@@ -12,7 +12,15 @@ interface AdminLayoutProps {
 }
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children, breadcrumbs, requiredPermission }) => {
-  const { user, hasPermission } = useAdminAuth();
+  const { user, isLoading, hasPermission } = useAdminAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   if (!user) return <Navigate to="/admin/login" replace />;
 

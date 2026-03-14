@@ -22,6 +22,24 @@ const SECTION_META: Record<string, { label: string; description: string }> = {
   rsvp: { label: 'RSVP', description: 'Allow guests to respond to your invitation.' },
 };
 
+const MAX_MEAL_OPTIONS = 8;
+
+const normalizeMealOptions = (options: string[]) => {
+  const seen = new Set<string>();
+
+  return options.reduce<string[]>((result, option) => {
+    const trimmed = option.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) {
+      return result;
+    }
+
+    seen.add(key);
+    result.push(trimmed);
+    return result;
+  }, []).slice(0, MAX_MEAL_OPTIONS);
+};
+
 interface InviteFormProps {
   config: TemplateConfig;
   invite: Invite;
@@ -93,6 +111,7 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
     invite.data?.enabledSections ?? config.supportedSections
   );
   const [previewData, setPreviewData] = useState<Record<string, any>>(formData);
+  const [mealOptionDraft, setMealOptionDraft] = useState('');
 
   const hasMountedRef = useRef(false);
   const autosaveRef = useRef<ReturnType<typeof setTimeout>>();
@@ -169,6 +188,40 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
   const handleBlur = useCallback((key: string) => {
     setTouched((previous) => ({ ...previous, [key]: true }));
   }, []);
+
+  const configuredMealOptions = useMemo(() => {
+    const raw = Array.isArray(formData.mealOptions)
+      ? formData.mealOptions.filter((item): item is string => typeof item === 'string')
+      : [];
+
+    return normalizeMealOptions(raw);
+  }, [formData.mealOptions]);
+
+  const addMealOption = useCallback(() => {
+    const nextOption = mealOptionDraft.trim();
+    if (!nextOption) {
+      toast({ title: 'Enter a meal option first', variant: 'destructive' });
+      return;
+    }
+
+    if (configuredMealOptions.length >= MAX_MEAL_OPTIONS) {
+      toast({ title: `You can add up to ${MAX_MEAL_OPTIONS} meal options`, variant: 'destructive' });
+      return;
+    }
+
+    if (configuredMealOptions.some((option) => option.toLowerCase() === nextOption.toLowerCase())) {
+      toast({ title: 'That meal option already exists', variant: 'destructive' });
+      return;
+    }
+
+    handleFieldChange('mealOptions', [...configuredMealOptions, nextOption]);
+    setMealOptionDraft('');
+  }, [configuredMealOptions, handleFieldChange, mealOptionDraft, toast]);
+
+  const removeMealOption = useCallback((optionToRemove: string) => {
+    const nextOptions = configuredMealOptions.filter((option) => option.toLowerCase() !== optionToRemove.toLowerCase());
+    handleFieldChange('mealOptions', nextOptions.length > 0 ? nextOptions : undefined);
+  }, [configuredMealOptions, handleFieldChange]);
 
   const fieldsByStep = useMemo(() => {
     return stepDefs.map((step) =>
@@ -700,21 +753,54 @@ const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
           <div className="p-6 space-y-4">
             <div>
               <label className="block text-sm font-body font-medium mb-1.5">Meal Options</label>
-              <input
-                type="text"
-                placeholder="Vegetarian, Non-Veg, Vegan"
-                value={(formData.mealOptions as string[] | undefined)?.join(', ') ?? ''}
-                onChange={(event) => {
-                  const options = event.target.value
-                    .split(',')
-                    .map((item) => item.trim())
-                    .filter(Boolean);
-                  handleFieldChange('mealOptions', options.length > 0 ? options : undefined);
-                }}
-                className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+              <div className="space-y-3">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="text"
+                    placeholder="Add a meal option"
+                    value={mealOptionDraft}
+                    onChange={(event) => setMealOptionDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        addMealOption();
+                      }
+                    }}
+                    className="w-full px-4 py-3 border border-border rounded-xl bg-background font-body text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={configuredMealOptions.length >= MAX_MEAL_OPTIONS}
+                    onClick={addMealOption}
+                  >
+                    Add option
+                  </Button>
+                </div>
+
+                {configuredMealOptions.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground font-body">
+                    No meal options added yet. Guests will not see a meal selector until you add one.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {configuredMealOptions.map((option) => (
+                      <div key={option} className="flex items-center gap-2 rounded-full border border-border bg-background px-3 py-2 text-sm font-body">
+                        <span>{option}</span>
+                        <button
+                          type="button"
+                          className="text-muted-foreground transition hover:text-foreground"
+                          onClick={() => removeMealOption(option)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground font-body mt-1">
-                Separate options with commas. Leave blank to hide the meal field.
+                Guests will see these as selectable options. Add up to {MAX_MEAL_OPTIONS} choices.
               </p>
             </div>
           </div>

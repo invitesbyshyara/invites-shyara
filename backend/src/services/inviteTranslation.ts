@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { prisma } from "../lib/prisma";
+import { deleteDistributedKey, getDistributedValue, setDistributedValue } from "../lib/distributedStore";
 import {
   DEFAULT_LANGUAGE,
   LocalizationSettings,
@@ -38,6 +39,8 @@ type GeminiTranslationResponse = {
 const MODEL_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 const TRANSLATION_PROVIDER = "gemini";
 const refreshTimers = new Map<string, NodeJS.Timeout>();
+const TRANSLATION_LOCK_TTL_SECONDS = 90;
+const TRANSLATION_COOLDOWN_SECONDS = 60;
 
 const languageLabels: Record<string, string> = {
   en: "English",
@@ -411,33 +414,147 @@ export const markInviteDataTranslationsStale = (data: Record<string, unknown>): 
   );
 
 export const refreshInviteTranslations = async (inviteId: string) => {
-  const invite = await prisma.invite.findUnique({
-    where: { id: inviteId },
-    select: {
-      id: true,
-      data: true,
-    },
+  const lockKey = `invite-translation-lock:${inviteId}`;
+  const lockOwner = createHash("sha256")
+    .update(`${inviteId}:${Date.now()}:${Math.random()}`)
+    .digest("hex");
+  const acquiredLock = await setDistributedValue(lockKey, lockOwner, {
+    nx: true,
+    exSeconds: TRANSLATION_LOCK_TTL_SECONDS,
   });
 
-  if (!invite) {
+  if (!acquiredLock) {
+    logger.info("Skipped invite translation refresh because another worker holds the lock", { inviteId });
     return;
   }
 
-  const data = asRecord(invite.data);
-  const localization = buildStaleLocalizationState(data);
-  const secondaryLanguages = localization.enabledLanguages.filter(
-    (language) => language !== localization.defaultLanguage
-  );
+  try {
+    const invite = await prisma.invite.findUnique({
+      where: { id: inviteId },
+      select: {
+        id: true,
+        data: true,
+      },
+    });
 
-  const normalizedRsvpSettings = trimQuestionTranslations(
-    normalizeRsvpSettings(data),
-    localization.enabledLanguages
-  );
+    if (!invite) {
+      return;
+    }
 
-  if (secondaryLanguages.length === 0) {
+    const data = asRecord(invite.data);
+    const localization = buildStaleLocalizationState(data);
+    const secondaryLanguages = localization.enabledLanguages.filter(
+      (language) => language !== localization.defaultLanguage
+    );
+
+    const normalizedRsvpSettings = trimQuestionTranslations(
+      normalizeRsvpSettings(data),
+      localization.enabledLanguages
+    );
+
+    if (secondaryLanguages.length === 0) {
+      const nextData = setInviteRsvpSettings(
+        setInviteLocalization(invite.data, localization) as Prisma.JsonValue,
+        normalizedRsvpSettings
+      );
+
+      await prisma.invite.update({
+        where: { id: invite.id },
+        data: {
+          data: nextData,
+        },
+      });
+      return;
+    }
+
+    const { entries, questions, sourceHash } = extractInviteTranslationSource(data);
+    const timestamp = new Date().toISOString();
+    const nextLocalization: LocalizationSettings = {
+      ...localization,
+      translations: { ...localization.translations },
+      translationMeta: { ...localization.translationMeta },
+    };
+    let nextRsvpSettings = normalizedRsvpSettings;
+    const needsTranslation =
+      (entries.length > 0 || questions.length > 0) &&
+      secondaryLanguages.some((language) => nextLocalization.translationMeta[language]?.status !== "up_to_date");
+
+    if (!needsTranslation) {
+      const nextData = setInviteRsvpSettings(
+        setInviteLocalization(invite.data, nextLocalization) as Prisma.JsonValue,
+        nextRsvpSettings
+      );
+
+      await prisma.invite.update({
+        where: { id: invite.id },
+        data: {
+          data: nextData,
+        },
+      });
+      return;
+    }
+
+    const cooldownKey = `invite-translation-cooldown:${inviteId}:${sourceHash}`;
+    const cooldownSet = await setDistributedValue(cooldownKey, "1", {
+      nx: true,
+      exSeconds: TRANSLATION_COOLDOWN_SECONDS,
+    });
+
+    if (!cooldownSet) {
+      logger.info("Skipped invite translation refresh because the source hash is cooling down", {
+        inviteId,
+        sourceHash,
+      });
+      return;
+    }
+
+    for (const language of secondaryLanguages) {
+      try {
+        const translated = entries.length > 0 || questions.length > 0
+          ? await translateWithGemini(language, entries, questions)
+          : { entries: [] as TranslationEntry[], questions: [] as QuestionTranslationEntry[] };
+
+        nextLocalization.translations[language] = buildInviteTranslationPatch(translated.entries);
+        nextLocalization.translationMeta[language] = {
+          status: "up_to_date",
+          sourceHash,
+          translatedAt: timestamp,
+          lastRequestedAt: timestamp,
+          provider: TRANSLATION_PROVIDER,
+          model: env.GEMINI_TRANSLATION_MODEL,
+        };
+
+        const translatedQuestions = new Map(translated.questions.map((question) => [question.id, question.label]));
+        nextRsvpSettings = {
+          ...nextRsvpSettings,
+          customQuestions: nextRsvpSettings.customQuestions.map((question) => ({
+            ...question,
+            translations: translatedQuestions.has(question.id)
+              ? {
+                  ...(question.translations ?? {}),
+                  [language]: translatedQuestions.get(question.id)!,
+                }
+              : question.translations,
+          })),
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Gemini translation failed.";
+        logger.error("Invite translation failed", { inviteId, language, message });
+        nextLocalization.translationMeta[language] = {
+          status: "failed",
+          sourceHash,
+          translatedAt: nextLocalization.translationMeta[language]?.translatedAt,
+          lastRequestedAt: timestamp,
+          lastError: message,
+          provider: TRANSLATION_PROVIDER,
+          model: env.GEMINI_TRANSLATION_MODEL,
+        };
+      }
+    }
+
     const nextData = setInviteRsvpSettings(
-      setInviteLocalization(invite.data, localization) as Prisma.JsonValue,
-      normalizedRsvpSettings
+      setInviteLocalization(invite.data, nextLocalization) as Prisma.JsonValue,
+      nextRsvpSettings
     );
 
     await prisma.invite.update({
@@ -446,73 +563,12 @@ export const refreshInviteTranslations = async (inviteId: string) => {
         data: nextData,
       },
     });
-    return;
-  }
-
-  const { entries, questions, sourceHash } = extractInviteTranslationSource(data);
-  const timestamp = new Date().toISOString();
-  const nextLocalization: LocalizationSettings = {
-    ...localization,
-    translations: { ...localization.translations },
-    translationMeta: { ...localization.translationMeta },
-  };
-  let nextRsvpSettings = normalizedRsvpSettings;
-
-  for (const language of secondaryLanguages) {
-    try {
-      const translated = entries.length > 0 || questions.length > 0
-        ? await translateWithGemini(language, entries, questions)
-        : { entries: [] as TranslationEntry[], questions: [] as QuestionTranslationEntry[] };
-
-      nextLocalization.translations[language] = buildInviteTranslationPatch(translated.entries);
-      nextLocalization.translationMeta[language] = {
-        status: "up_to_date",
-        sourceHash,
-        translatedAt: timestamp,
-        lastRequestedAt: timestamp,
-        provider: TRANSLATION_PROVIDER,
-        model: env.GEMINI_TRANSLATION_MODEL,
-      };
-
-      const translatedQuestions = new Map(translated.questions.map((question) => [question.id, question.label]));
-      nextRsvpSettings = {
-        ...nextRsvpSettings,
-        customQuestions: nextRsvpSettings.customQuestions.map((question) => ({
-          ...question,
-          translations: translatedQuestions.has(question.id)
-            ? {
-                ...(question.translations ?? {}),
-                [language]: translatedQuestions.get(question.id)!,
-              }
-            : question.translations,
-        })),
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Gemini translation failed.";
-      logger.error("Invite translation failed", { inviteId, language, message });
-      nextLocalization.translationMeta[language] = {
-        status: "failed",
-        sourceHash,
-        translatedAt: nextLocalization.translationMeta[language]?.translatedAt,
-        lastRequestedAt: timestamp,
-        lastError: message,
-        provider: TRANSLATION_PROVIDER,
-        model: env.GEMINI_TRANSLATION_MODEL,
-      };
+  } finally {
+    const currentOwner = await getDistributedValue(lockKey).catch(() => null);
+    if (currentOwner === lockOwner) {
+      await deleteDistributedKey(lockKey).catch(() => undefined);
     }
   }
-
-  const nextData = setInviteRsvpSettings(
-    setInviteLocalization(invite.data, nextLocalization) as Prisma.JsonValue,
-    nextRsvpSettings
-  );
-
-  await prisma.invite.update({
-    where: { id: invite.id },
-    data: {
-      data: nextData,
-    },
-  });
 };
 
 export const scheduleInviteTranslationRefresh = (inviteId: string, delayMs = 1_500) => {

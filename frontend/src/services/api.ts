@@ -19,27 +19,45 @@ import {
   User,
 } from "@/types";
 import { allTemplates, getTemplateBySlug } from "@/templates/registry";
+import { buildCanonicalApiBase, normalizeApiOrigin } from "@/lib/apiBase";
 
 type ApiResponse<T> = {
   success: boolean;
   data: T;
   error?: string;
+  code?: string;
+  requestId?: string;
+  fields?: Array<{ field: string; message: string }>;
 };
 
 class ApiError extends Error {
   status: number;
+  code?: string;
+  requestId?: string;
+  fields?: Array<{ field: string; message: string }>;
 
-  constructor(message: string, status: number) {
+  constructor(
+    message: string,
+    status: number,
+    options?: {
+      code?: string;
+      requestId?: string;
+      fields?: Array<{ field: string; message: string }>;
+    },
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = options?.code;
+    this.requestId = options?.requestId;
+    this.fields = options?.fields;
   }
 }
 
-const ACCESS_TOKEN_KEY = "shyara_access_token";
-const CACHED_USER_KEY = "shyara_user";
-export const apiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:3000";
-const API_BASE = apiUrl.endsWith("/api") ? apiUrl : `${apiUrl}/api`;
+const CSRF_COOKIE_KEY = "csrfToken";
+const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:3000";
+export const apiUrl = normalizeApiOrigin(configuredApiUrl);
+const API_BASE = buildCanonicalApiBase(configuredApiUrl);
 
 const inviteSlugMap = new Map<string, string>();
 let refreshPromise: Promise<boolean> | null = null;
@@ -52,21 +70,17 @@ const denormalizeStatus = (status: InviteStatus): string =>
 
 const toCategory = (value: string): EventCategory => value.replace(/_/g, "-") as EventCategory;
 
-const getStoredToken = () => localStorage.getItem(ACCESS_TOKEN_KEY);
-const setStoredToken = (token: string) => localStorage.setItem(ACCESS_TOKEN_KEY, token);
-const clearStoredToken = () => localStorage.removeItem(ACCESS_TOKEN_KEY);
-
-const setCachedUser = (user: User) => localStorage.setItem(CACHED_USER_KEY, JSON.stringify(user));
-const getCachedUser = (): User | null => {
-  const raw = localStorage.getItem(CACHED_USER_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as User;
-  } catch {
-    return null;
+const getCookie = (name: string) => {
+  if (typeof document === "undefined") {
+    return undefined;
   }
+
+  const match = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(`${name}=`));
+
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : undefined;
 };
-const clearCachedUser = () => localStorage.removeItem(CACHED_USER_KEY);
 
 const parsePayload = async <T>(res: Response): Promise<ApiResponse<T> | null> => {
   const text = await res.text();
@@ -88,12 +102,8 @@ const refreshAccessToken = async (): Promise<boolean> => {
       if (!res.ok) {
         return false;
       }
-      const payload = await parsePayload<{ accessToken: string }>(res);
-      if (!payload?.success || !payload.data?.accessToken) {
-        return false;
-      }
-      setStoredToken(payload.data.accessToken);
-      return true;
+      const payload = await parsePayload<{ ok: boolean }>(res);
+      return Boolean(payload?.success);
     } catch {
       return false;
     }
@@ -117,10 +127,10 @@ const request = async <T>(
     headers.set("Content-Type", "application/json");
   }
 
-  if (requiresAuth) {
-    const token = getStoredToken();
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
+  if (requiresAuth && !["GET", "HEAD", "OPTIONS"].includes((options.method ?? "GET").toUpperCase())) {
+    const csrfToken = getCookie(CSRF_COOKIE_KEY);
+    if (csrfToken) {
+      headers.set("X-CSRF-Token", csrfToken);
     }
   }
 
@@ -136,13 +146,15 @@ const request = async <T>(
     if (refreshed) {
       return request<T>(path, options, requiresAuth, false);
     }
-    clearStoredToken();
-    clearCachedUser();
   }
 
   const payload = await parsePayload<T>(res);
   if (!res.ok || !payload?.success) {
-    throw new ApiError(payload?.error ?? "Request failed", res.status);
+    throw new ApiError(payload?.error ?? "Request failed", res.status, {
+      code: payload?.code,
+      requestId: payload?.requestId,
+      fields: payload?.fields,
+    });
   }
 
   return payload.data;
@@ -154,12 +166,20 @@ const mapUser = (raw: {
   email: string;
   phone?: string | null;
   avatarUrl?: string | null;
+  emailVerified: boolean;
+  emailPreferences?: User["emailPreferences"];
+  mfaEnabled?: boolean;
+  recoveryCodesRemaining?: number;
 }): User => ({
   id: raw.id,
   name: raw.name,
   email: raw.email,
   phone: raw.phone ?? undefined,
   avatar: raw.avatarUrl ?? undefined,
+  emailVerified: raw.emailVerified,
+  emailPreferences: raw.emailPreferences,
+  mfaEnabled: raw.mfaEnabled,
+  recoveryCodesRemaining: raw.recoveryCodesRemaining,
 });
 
 const mergeTemplate = (raw: {
@@ -243,9 +263,31 @@ type CheckoutOrderResponse = {
   currency?: string;
 };
 
+type AuthenticatedUserPayload = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  emailVerified: boolean;
+  emailPreferences?: User["emailPreferences"];
+  mfaEnabled?: boolean;
+  recoveryCodesRemaining?: number;
+};
+
+type CustomerAuthResult =
+  | {
+      requiresMfa: true;
+      challengeId: string;
+      user: Pick<User, "id" | "name" | "email" | "emailVerified" | "mfaEnabled">;
+    }
+  | {
+      requiresMfa?: false;
+      user: User;
+    };
+
 export const api = {
-  getCachedUser,
-  hasStoredSession: () => Boolean(getStoredToken()),
+  hasStoredSession: () => Boolean(getCookie(CSRF_COOKIE_KEY)),
 
   getPlatformStatus: async () => request<PlatformStatus>("/public/platform-status"),
 
@@ -528,7 +570,10 @@ export const api = {
       `/invite-ops/${inviteId}/localization`,
       {
         method: "PUT",
-        body: JSON.stringify(localization),
+        body: JSON.stringify({
+          defaultLanguage: localization.defaultLanguage,
+          enabledLanguages: localization.enabledLanguages,
+        }),
       },
       true,
     );
@@ -642,8 +687,17 @@ export const api = {
     );
   },
 
-  login: async (email: string, password: string) => {
-    const result = await request<{ user: User; accessToken: string }>(
+  login: async (email: string, password: string): Promise<CustomerAuthResult> => {
+    const result = await request<
+      | {
+          requiresMfa: true;
+          challengeId: string;
+          user: Pick<User, "id" | "name" | "email" | "emailVerified" | "mfaEnabled">;
+        }
+      | {
+          user: AuthenticatedUserPayload;
+        }
+    >(
       "/auth/login",
       {
         method: "POST",
@@ -651,14 +705,14 @@ export const api = {
       },
       false,
     );
-    const user = mapUser(result.user as unknown as Parameters<typeof mapUser>[0]);
-    setStoredToken(result.accessToken);
-    setCachedUser(user);
-    return { user, token: result.accessToken };
+    if ("requiresMfa" in result && result.requiresMfa) {
+      return result;
+    }
+    return { user: mapUser(result.user) };
   },
 
-  register: async (name: string, email: string, password: string) => {
-    const result = await request<{ user: User; accessToken: string }>(
+  register: async (name: string, email: string, password: string): Promise<{ user: User }> => {
+    const result = await request<{ user: AuthenticatedUserPayload }>(
       "/auth/register",
       {
         method: "POST",
@@ -666,14 +720,20 @@ export const api = {
       },
       false,
     );
-    const user = mapUser(result.user as unknown as Parameters<typeof mapUser>[0]);
-    setStoredToken(result.accessToken);
-    setCachedUser(user);
-    return { user, token: result.accessToken };
+    return { user: mapUser(result.user) };
   },
 
-  googleAuth: async (accessToken: string) => {
-    const result = await request<{ user: User; accessToken: string }>(
+  googleAuth: async (accessToken: string): Promise<CustomerAuthResult> => {
+    const result = await request<
+      | {
+          requiresMfa: true;
+          challengeId: string;
+          user: Pick<User, "id" | "name" | "email" | "emailVerified" | "mfaEnabled">;
+        }
+      | {
+          user: AuthenticatedUserPayload;
+        }
+    >(
       "/auth/google",
       {
         method: "POST",
@@ -681,54 +741,49 @@ export const api = {
       },
       false,
     );
-    const user = mapUser(result.user as unknown as Parameters<typeof mapUser>[0]);
-    setStoredToken(result.accessToken);
-    setCachedUser(user);
-    return { user, token: result.accessToken };
+    if ("requiresMfa" in result && result.requiresMfa) {
+      return result;
+    }
+    return { user: mapUser(result.user) };
   },
 
   getMe: async () => {
-    const user = await request<{
-      id: string;
-      name: string;
-      email: string;
-      phone?: string | null;
-      avatarUrl?: string | null;
-    }>("/auth/me", {}, true);
-    const mapped = mapUser(user);
-    setCachedUser(mapped);
-    return mapped;
+    const user = await request<AuthenticatedUserPayload>("/auth/me", {}, true);
+    return mapUser(user);
   },
 
-  updateProfile: async (data: Partial<User>) => {
-    const updated = await request<{
-      id: string;
-      name: string;
-      email: string;
-      phone?: string | null;
-      avatarUrl?: string | null;
-    }>(
+  updateProfile: async (data: Partial<User> & { avatarUrl?: string | null }) => {
+    const updated = await request<AuthenticatedUserPayload>(
       "/auth/me",
       {
         method: "PUT",
         body: JSON.stringify({
           ...(data.name !== undefined ? { name: data.name } : {}),
           ...(data.phone !== undefined ? { phone: data.phone } : {}),
+          ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
+          ...(data.emailPreferences !== undefined ? { emailPreferences: data.emailPreferences } : {}),
         }),
       },
       true,
     );
-    const mapped = mapUser(updated);
-    setCachedUser(mapped);
-    return mapped;
+    return mapUser(updated);
   },
 
-  updatePassword: async (currentPassword: string, newPassword: string) => {
+  updatePassword: async (
+    currentPassword: string,
+    newPassword: string,
+    options?: { mfaCode?: string; recoveryCode?: string },
+  ) => {
     return request<{ message: string }>(
       "/auth/password",
       {
         method: "PUT",
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+          ...(options?.mfaCode ? { mfaCode: options.mfaCode } : {}),
+          ...(options?.recoveryCode ? { recoveryCode: options.recoveryCode } : {}),
+        }),
       },
       true,
     );
@@ -757,21 +812,97 @@ export const api = {
   },
 
   logout: async () => {
-    try {
-      await request<{ message: string }>("/auth/logout", { method: "POST" }, false);
-    } finally {
-      clearStoredToken();
-      clearCachedUser();
-    }
+    await request<{ message: string }>("/auth/logout", { method: "POST" }, true);
   },
 
   deleteAccount: async () => {
-    try {
-      await request<{ message: string }>("/auth/me", { method: "DELETE" }, true);
-    } finally {
-      clearStoredToken();
-      clearCachedUser();
-    }
+    await request<{ message: string }>("/auth/me", { method: "DELETE" }, true);
+  },
+
+  requestEmailVerification: async () =>
+    request<{ message: string }>(
+      "/auth/verify-email/request",
+      { method: "POST" },
+      true,
+    ),
+
+  confirmEmailVerification: async (token: string) =>
+    request<{ message: string }>(
+      "/auth/verify-email/confirm",
+      {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      },
+      false,
+    ),
+
+  getMfaStatus: async () =>
+    request<{ enabled: boolean; recoveryCodesRemaining: number }>(
+      "/auth/mfa/status",
+      {},
+      true,
+    ),
+
+  beginMfaEnrollment: async () =>
+    request<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string }>(
+      "/auth/mfa/enroll",
+      { method: "POST" },
+      true,
+    ),
+
+  verifyMfaEnrollment: async (code: string) =>
+    request<{ enabled: boolean; recoveryCodes: string[] }>(
+      "/auth/mfa/verify",
+      {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      },
+      true,
+    ),
+
+  completeMfaLogin: async (challengeId: string, input: { code?: string; recoveryCode?: string }) => {
+    const result = await request<{ user: AuthenticatedUserPayload }>(
+      "/auth/mfa/complete-login",
+      {
+        method: "POST",
+        body: JSON.stringify({ challengeId, ...input }),
+      },
+      false,
+    );
+    return { user: mapUser(result.user) };
+  },
+
+  rotateMfaRecoveryCodes: async (input: { code?: string; recoveryCode?: string }) =>
+    request<{ recoveryCodes: string[] }>(
+      "/auth/mfa/recovery-codes/rotate",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      true,
+    ),
+
+  disableMfa: async (input: { code?: string; recoveryCode?: string }) =>
+    request<{ message: string }>(
+      "/auth/mfa/disable",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      true,
+    ),
+
+  uploadImage: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request<{ url: string; publicId: string }>(
+      "/invites/upload-image",
+      {
+        method: "POST",
+        body: formData,
+      },
+      true,
+    );
   },
 
   validatePromo: async (templateSlug: string, code: string) =>
