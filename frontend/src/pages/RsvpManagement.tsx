@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Invite, Rsvp } from "@/types";
 import { getInviteHeadline } from "@/utils/invite";
+import DashboardLayout from "@/components/DashboardLayout";
 
 const RsvpManagement = () => {
   const { inviteId } = useParams<{ inviteId: string }>();
@@ -60,91 +62,157 @@ const RsvpManagement = () => {
     URL.revokeObjectURL(url);
   };
 
+  const inviteHeadline = invite ? getInviteHeadline(invite) : "";
+
+  const breadcrumbs = [
+    { label: "Dashboard", href: "/dashboard" },
+    ...(invite ? [{ label: inviteHeadline, href: `/dashboard/invites/${inviteId}/operations` }] : []),
+    { label: "Responses" },
+  ];
+
+  // Stat cards — clicking one sets the active filter
+  const statCards = [
+    { label: "Total", value: stats.total, color: "text-foreground", filter: "all" },
+    { label: "Attending", value: stats.yes, color: "text-emerald-600 dark:text-emerald-400", filter: "yes" },
+    { label: "Not Attending", value: stats.no, color: "text-destructive", filter: "no" },
+    { label: "Maybe", value: stats.maybe, color: "text-muted-foreground", filter: "maybe" },
+    { label: "Total Guests", value: stats.totalGuests, color: "text-foreground", filter: "yes" },
+  ];
+
   return (
-    <div className="min-h-screen bg-background">
-      <nav className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container flex items-center justify-between h-16">
-          <Link to="/" className="font-display text-xl font-bold">Shyara</Link>
-          <Link to="/dashboard" className="text-sm text-muted-foreground font-body hover:text-foreground">Back to Dashboard</Link>
+    <DashboardLayout
+      breadcrumbs={breadcrumbs}
+      actions={
+        <div className="flex items-center gap-2">
+          {invite?.slug && (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/i/${invite.slug}`} target="_blank">
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open Live Invite
+              </Link>
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
         </div>
-      </nav>
-
+      }
+    >
       <div className="container py-10 px-4 max-w-5xl space-y-8">
-        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-          <div>
-            <h1 className="font-display text-3xl font-bold">{invite ? getInviteHeadline(invite) : "RSVP Responses"}</h1>
-            <p className="text-muted-foreground font-body text-sm mt-1">
-              Review guest responses, messages, and headcount in one place.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button asChild variant="outline"><Link to={`/dashboard/invites/${inviteId}/operations`}>Open Operations</Link></Button>
-            {invite?.slug && <Button asChild variant="outline"><Link to={`/i/${invite.slug}`} target="_blank">Open Live Invite</Link></Button>}
-            <Button variant="outline" onClick={handleExport}>Export CSV</Button>
-          </div>
+        {/* Page heading */}
+        <div>
+          <h1 className="font-display text-3xl font-bold">
+            {invite ? `${inviteHeadline} — Responses` : "RSVP Responses"}
+          </h1>
+          <p className="text-muted-foreground font-body text-sm mt-1">
+            Review guest responses, messages, and headcount in one place.
+          </p>
         </div>
 
+        {/* Stat cards — clickable to filter */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {[
-            { label: "Total", value: stats.total, color: "text-foreground" },
-            { label: "Attending", value: stats.yes, color: "text-gold" },
-            { label: "Not Attending", value: stats.no, color: "text-destructive" },
-            { label: "Maybe", value: stats.maybe, color: "text-muted-foreground" },
-            { label: "Guests", value: stats.totalGuests, color: "text-gold" },
-          ].map((stat) => (
-            <div key={stat.label} className="p-4 rounded-xl border border-border bg-card text-center">
+          {statCards.map((stat) => (
+            <button
+              key={stat.label}
+              onClick={() => setFilterResponse(stat.filter)}
+              className={`p-4 rounded-xl border bg-card text-center transition-all cursor-pointer ${
+                filterResponse === stat.filter
+                  ? "border-primary/60 ring-2 ring-primary/20"
+                  : "border-border hover:border-primary/40"
+              }`}
+            >
               <p className={`text-2xl font-display font-bold ${stat.color}`}>{stat.value}</p>
               <p className="text-xs text-muted-foreground font-body mt-1">{stat.label}</p>
-            </div>
+            </button>
           ))}
         </div>
 
+        {/* Search + filter row */}
         <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <div className="flex flex-col sm:flex-row gap-3">
-            <Input placeholder="Search by guest name..." value={search} onChange={(event) => setSearch(event.target.value)} className="flex-1 text-sm" />
+            <Input
+              placeholder="Search by guest name..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="flex-1 text-sm"
+            />
             <div className="flex gap-2 flex-wrap">
-              {["all", "yes", "no", "maybe"].map((filter) => (
+              {[
+                { filter: "all", label: "All" },
+                { filter: "yes", label: "Attending" },
+                { filter: "no", label: "Not Attending" },
+                { filter: "maybe", label: "Maybe" },
+              ].map(({ filter, label }) => (
                 <button
                   key={filter}
                   onClick={() => setFilterResponse(filter)}
-                  className={`px-3 py-2 rounded-lg text-xs font-body capitalize transition-colors ${filterResponse === filter ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-accent"}`}
+                  className={`px-3 py-2 rounded-lg text-xs font-body transition-colors ${
+                    filterResponse === filter
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-secondary-foreground hover:bg-accent"
+                  }`}
                 >
-                  {filter === "all" ? "All" : filter}
+                  {label}
                 </button>
               ))}
             </div>
           </div>
-          <p className="text-sm text-muted-foreground font-body">Filter responses and scan guest messages quickly, especially from mobile.</p>
         </div>
 
+        {/* Results */}
         {loading ? (
-          <div className="text-center py-12"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" /></div>
+          <div className="text-center py-12">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 rounded-xl border border-border bg-card">
             <div className="text-4xl mb-4">📭</div>
-            <h3 className="font-display text-xl font-semibold mb-2">{rsvps.length === 0 ? "No RSVPs yet" : "No matching results"}</h3>
-            <p className="text-muted-foreground font-body text-sm">{rsvps.length === 0 ? "Share your invite link to start receiving responses." : "Try a different search or filter."}</p>
+            <h3 className="font-display text-xl font-semibold mb-2">
+              {rsvps.length === 0 ? "No responses yet" : "No matching results"}
+            </h3>
+            <p className="text-muted-foreground font-body text-sm">
+              {rsvps.length === 0
+                ? "Share your invite link to start receiving responses."
+                : "Try a different search or filter."}
+            </p>
           </div>
         ) : (
           <>
+            {/* Mobile: card layout */}
             <div className="grid gap-4 md:hidden">
               {filtered.map((rsvp) => (
                 <div key={rsvp.id} className="rounded-xl border border-border bg-card p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="font-display font-semibold">{rsvp.name}</h3>
-                      <p className="text-xs text-muted-foreground font-body mt-1">{new Date(rsvp.submittedAt).toLocaleDateString()}</p>
+                      <p className="text-xs text-muted-foreground font-body mt-1">
+                        {new Date(rsvp.submittedAt).toLocaleDateString()}
+                      </p>
                     </div>
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-body font-medium capitalize ${rsvp.response === "yes" ? "bg-accent text-accent-foreground" : rsvp.response === "no" ? "bg-destructive/10 text-destructive" : "bg-secondary text-secondary-foreground"}`}>
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-body font-medium capitalize ${
+                      rsvp.response === "yes"
+                        ? "bg-accent text-accent-foreground"
+                        : rsvp.response === "no"
+                        ? "bg-destructive/10 text-destructive"
+                        : "bg-secondary text-secondary-foreground"
+                    }`}>
                       {rsvp.response === "yes" ? "Attending" : rsvp.response === "no" ? "Not Attending" : "Maybe"}
                     </span>
                   </div>
-                  <p className="text-sm text-muted-foreground font-body mt-3">Guests: {rsvp.guestCount}</p>
-                  {rsvp.message && <p className="text-sm font-body mt-3">{rsvp.message}</p>}
+                  <p className="text-sm text-muted-foreground font-body mt-3">
+                    {rsvp.guestCount} {rsvp.guestCount === 1 ? "guest" : "guests"}
+                  </p>
+                  {rsvp.message && (
+                    <p className="text-sm font-body mt-3 border-l-2 border-muted-foreground/30 pl-3 text-muted-foreground">
+                      {rsvp.message}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
 
+            {/* Desktop: table layout */}
             <div className="hidden md:block rounded-xl border border-border overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -162,13 +230,29 @@ const RsvpManagement = () => {
                       <tr key={rsvp.id} className="border-t border-border hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 text-sm font-body font-medium">{rsvp.name}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-body font-medium capitalize ${rsvp.response === "yes" ? "bg-accent text-accent-foreground" : rsvp.response === "no" ? "bg-destructive/10 text-destructive" : "bg-secondary text-secondary-foreground"}`}>
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-body font-medium capitalize ${
+                            rsvp.response === "yes"
+                              ? "bg-accent text-accent-foreground"
+                              : rsvp.response === "no"
+                              ? "bg-destructive/10 text-destructive"
+                              : "bg-secondary text-secondary-foreground"
+                          }`}>
                             {rsvp.response === "yes" ? "Attending" : rsvp.response === "no" ? "Not Attending" : "Maybe"}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm font-body text-muted-foreground">{rsvp.guestCount}</td>
-                        <td className="px-4 py-3 text-sm font-body text-muted-foreground max-w-[240px] truncate">{rsvp.message}</td>
-                        <td className="px-4 py-3 text-xs font-body text-muted-foreground">{new Date(rsvp.submittedAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-sm font-body text-muted-foreground max-w-[240px]">
+                          {rsvp.message ? (
+                            <span className="border-l-2 border-muted-foreground/30 pl-3 block truncate">
+                              {rsvp.message}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/40">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-body text-muted-foreground">
+                          {new Date(rsvp.submittedAt).toLocaleDateString()}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -178,7 +262,7 @@ const RsvpManagement = () => {
           </>
         )}
       </div>
-    </div>
+    </DashboardLayout>
   );
 };
 

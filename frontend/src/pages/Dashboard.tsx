@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
-import { MoreHorizontal, Search, Share2, Trash2 } from "lucide-react";
+import { Check, ChevronRight, Copy, ExternalLink, MoreHorizontal, Plus, Search, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { api, apiUrl as apiBaseUrl } from "@/services/api";
@@ -21,12 +22,26 @@ import { getTemplateBySlug } from "@/templates/registry";
 import { buildShareMessage } from "@/utils/share";
 import { getEventDateFromData, getInviteHeadline } from "@/utils/invite";
 
+const statusBorderColor: Record<string, string> = {
+  published: "border-l-4 border-l-emerald-500",
+  draft: "border-l-4 border-l-amber-400",
+  expired: "border-l-4 border-l-slate-400",
+  "taken-down": "border-l-4 border-l-destructive",
+};
+
 const statusStyles: Record<string, string> = {
-  published: "bg-accent text-accent-foreground",
-  draft: "bg-secondary text-secondary-foreground",
+  published: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+  draft: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
   expired: "bg-muted text-muted-foreground",
   "taken-down": "bg-destructive/10 text-destructive",
 };
+
+const STATUS_TABS = [
+  { value: "all", label: "All Invites" },
+  { value: "draft", label: "Drafts" },
+  { value: "published", label: "Published" },
+  { value: "expired", label: "Expired" },
+];
 
 const Dashboard = () => {
   const { isAuthenticated, user, logout } = useAuth();
@@ -40,6 +55,7 @@ const Dashboard = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("updated");
+  const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -77,11 +93,12 @@ const Dashboard = () => {
   const drafts = invites.filter((invite) => invite.status === "draft").length;
 
   const checklist = [
-    { label: "Choose a template", complete: invites.length > 0 },
-    { label: "Start your first draft", complete: drafts > 0 || publishedInvites > 0 },
-    { label: "Publish your invite", complete: publishedInvites > 0 },
-    { label: "Share and collect RSVPs", complete: totalRsvps > 0 },
+    { label: "Pick a template", complete: invites.length > 0 },
+    { label: "Fill in your details", complete: drafts > 0 || publishedInvites > 0 },
+    { label: "Go live", complete: publishedInvites > 0 },
+    { label: "Share with your guests", complete: totalRsvps > 0 },
   ];
+  const allChecklistComplete = checklist.every((item) => item.complete);
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -103,9 +120,46 @@ const Dashboard = () => {
     navigate("/", { replace: true });
   };
 
+  const handleCopySlug = (slug: string) => {
+    void navigator.clipboard.writeText(`${window.location.origin}/i/${slug}`);
+    setCopiedSlug(slug);
+    setTimeout(() => setCopiedSlug(null), 2000);
+  };
+
+  const firstPublishedInvite = invites.find((invite) => invite.status === "published");
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
+
+  const statCards = [
+    {
+      label: "My Invites",
+      value: invites.length,
+      hint: "All drafts and live invites",
+      action: () => setStatusFilter("all"),
+      actionLabel: "View all invites",
+      disabled: false,
+    },
+    {
+      label: "Live Now",
+      value: publishedInvites,
+      hint: "Active invite links your guests can open",
+      action: () => setStatusFilter("published"),
+      actionLabel: "View published",
+      disabled: false,
+    },
+    {
+      label: "Responses Received",
+      value: totalRsvps,
+      hint: firstPublishedInvite ? "Total RSVPs across all invites" : "Publish an invite to start collecting RSVPs",
+      action: () => {
+        if (firstPublishedInvite) navigate(`/dashboard/invites/${firstPublishedInvite.id}/rsvps`);
+      },
+      actionLabel: firstPublishedInvite ? "View all responses" : "No responses yet",
+      disabled: !firstPublishedInvite,
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -122,75 +176,112 @@ const Dashboard = () => {
       </nav>
 
       <div className="container py-10 px-4 space-y-8">
+        {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
           <div>
             <h1 className="font-display text-3xl font-bold">Welcome, {user?.name?.split(" ")[0] || "there"}</h1>
             <p className="text-muted-foreground font-body text-sm mt-1">Create, publish, share, and manage your live invite links in one place.</p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button asChild variant="outline"><Link to="/templates">Preview More Templates</Link></Button>
-            <Button asChild><Link to="/templates">Create New Invite</Link></Button>
-          </div>
+          <Button asChild size="lg">
+            <Link to="/templates">
+              <Plus className="w-4 h-4 mr-2" />
+              New Invite
+            </Link>
+          </Button>
         </div>
 
+        {/* Stats + Checklist */}
         <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {loading ? Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-28 rounded-xl" />) : [
-              { label: "Total Invites", value: invites.length, hint: "All drafts and published invites" },
-              { label: "Published", value: publishedInvites, hint: "Live links guests can open" },
-              { label: "Total RSVPs", value: totalRsvps, hint: "Responses collected across invites" },
-            ].map((stat) => (
-              <div key={stat.label} className="p-6 rounded-xl border border-border bg-card">
-                <p className="text-sm text-muted-foreground font-body">{stat.label}</p>
-                <p className="text-3xl font-display font-bold mt-2">{stat.value}</p>
-                <p className="text-xs text-muted-foreground font-body mt-2">{stat.hint}</p>
+            {loading
+              ? Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-28 rounded-xl" />)
+              : statCards.map((stat) => (
+                <button
+                  key={stat.label}
+                  onClick={stat.action}
+                  disabled={stat.disabled}
+                  title={stat.actionLabel}
+                  className={`p-6 rounded-xl border border-border bg-card text-left w-full transition-all group ${
+                    stat.disabled
+                      ? "opacity-60 cursor-not-allowed"
+                      : "cursor-pointer hover:border-primary/50 hover:ring-2 hover:ring-primary/10"
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <p className="text-sm text-muted-foreground font-body">{stat.label}</p>
+                    {!stat.disabled && (
+                      <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-primary/70 transition-colors shrink-0 mt-0.5" />
+                    )}
+                  </div>
+                  <p className="text-3xl font-display font-bold mt-2">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground font-body mt-2">{stat.hint}</p>
+                </button>
+              ))}
+          </div>
+
+          {/* Checklist — only shown until all steps are complete */}
+          {!allChecklistComplete && (
+            <div className="rounded-xl border border-border bg-card p-6">
+              <h2 className="font-display text-lg font-semibold mb-4">Getting started</h2>
+              <div className="space-y-3">
+                {checklist.map((item) => (
+                  <div key={item.label} className="flex items-start gap-3">
+                    <div className={`w-5 h-5 rounded-full mt-0.5 flex items-center justify-center text-xs shrink-0 ${item.complete ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                      {item.complete ? <Check className="w-3 h-3" /> : ""}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">{item.complete ? "Done" : "Pending"}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Filters — two rows for clarity */}
+        <div className="space-y-3">
+          {/* Row 1: Status tabs */}
+          <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1 w-fit">
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setStatusFilter(tab.value)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium font-body transition-all ${
+                  statusFilter === tab.value
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
             ))}
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-6">
-            <h2 className="font-display text-lg font-semibold mb-4">Getting started</h2>
-            <div className="space-y-3">
-              {checklist.map((item) => (
-                <div key={item.label} className="flex items-start gap-3">
-                  <div className={`w-5 h-5 rounded-full mt-0.5 flex items-center justify-center text-xs ${item.complete ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                    {item.complete ? "✓" : ""}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{item.label}</p>
-                    <p className="text-xs text-muted-foreground">{item.complete ? "Done" : "Pending"}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-          <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
-            <div className="relative min-w-[220px] lg:max-w-sm">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by event, slug, or template" className="pl-9" />
-            </div>
+          {/* Row 2: Search, sort, result count */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
             <div className="flex flex-col sm:flex-row gap-3">
-              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="px-4 py-2 rounded-lg border border-border bg-background text-sm font-body">
-                <option value="all">All statuses</option>
-                <option value="draft">Drafts</option>
-                <option value="published">Published</option>
-                <option value="expired">Expired</option>
-                <option value="taken-down">Taken down</option>
-              </select>
+              <div className="relative min-w-[220px] lg:max-w-sm">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by event, slug, or template" className="pl-9" />
+              </div>
               <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="px-4 py-2 rounded-lg border border-border bg-background text-sm font-body">
-                <option value="updated">Recently updated</option>
-                <option value="created">Recently created</option>
+                <option value="updated">Last Modified</option>
+                <option value="created">Recently Created</option>
                 <option value="name">Name</option>
-                <option value="rsvps">Most RSVPs</option>
+                <option value="rsvps">Most Responses</option>
               </select>
             </div>
+            {!loading && (
+              <p className="text-xs text-muted-foreground font-body shrink-0">
+                Showing {filteredInvites.length} of {invites.length} {invites.length === 1 ? "invite" : "invites"}
+              </p>
+            )}
           </div>
-          <p className="text-sm text-muted-foreground font-body">Use the filters to focus on drafts, live invites, or older links that need attention.</p>
         </div>
 
+        {/* Invite Cards */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-80 rounded-xl" />)}
@@ -210,39 +301,49 @@ const Dashboard = () => {
               const template = getTemplateBySlug(invite.templateSlug);
               const title = getInviteHeadline(invite);
               const eventDate = getEventDateFromData(invite.data ?? {});
+              const isDraft = invite.status === "draft";
+              const isPublished = invite.status === "published";
+              const editPath = isDraft ? `/create/${invite.id}` : `/dashboard/invites/${invite.id}/edit`;
 
               return (
-                <div key={invite.id} className="rounded-xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                  <div className="h-52 bg-muted/40 border-b border-border">
+                <div
+                  key={invite.id}
+                  className={`rounded-xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-md transition-shadow ${statusBorderColor[invite.status] || statusBorderColor.expired}`}
+                >
+                  <div className="h-48 bg-muted/40 border-b border-border">
                     {template ? <TemplateThumbnail config={template} /> : <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Preview unavailable</div>}
                   </div>
+
                   <div className="p-5">
+                    {/* Title row */}
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="min-w-0">
                         <h3 className="font-display font-semibold text-lg truncate">{title}</h3>
-                        <p className="text-xs text-muted-foreground font-body mt-1 capitalize">{invite.templateSlug.replace(/-/g, " ")}</p>
+                        <p className="text-xs text-muted-foreground font-body mt-0.5 capitalize">{invite.templateSlug.replace(/-/g, " ")}</p>
                         {invite.accessRole && invite.accessRole !== "owner" && (
-                          <p className="text-[11px] text-muted-foreground font-body mt-1 capitalize">Workspace role: {invite.accessRole}</p>
+                          <p className="text-xs text-muted-foreground font-body mt-0.5 capitalize">Role: {invite.accessRole}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-body font-medium capitalize shrink-0 ${statusStyles[invite.status] || statusStyles.expired}`}>
-                          {invite.status}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-body font-medium capitalize ${statusStyles[invite.status] || statusStyles.expired}`}>
+                          {invite.status === "published" ? "Live" : invite.status === "taken-down" ? "Taken down" : invite.status}
                         </span>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <button className="w-8 h-8 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors">
+                            <button className="w-8 h-8 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors" aria-label="More options">
                               <MoreHorizontal className="w-4 h-4" />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(invite.status === "draft" ? `/create/${invite.id}` : `/dashboard/invites/${invite.id}/edit`)}>
-                              Edit invite
-                            </DropdownMenuItem>
-                            {invite.status === "published" && invite.slug && (
-                              <DropdownMenuItem onClick={() => setShareInviteId(invite.id)}>
-                                <Share2 className="w-4 h-4 mr-2" /> Share invite
-                              </DropdownMenuItem>
+                            {isPublished && invite.slug && (
+                              <>
+                                <DropdownMenuItem asChild>
+                                  <Link to={`/i/${invite.slug}`} target="_blank" className="flex items-center">
+                                    <ExternalLink className="w-4 h-4 mr-2" /> Open Live Page
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                              </>
                             )}
                             <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteId(invite.id)}>
                               <Trash2 className="w-4 h-4 mr-2" /> Delete invite
@@ -252,42 +353,58 @@ const Dashboard = () => {
                       </div>
                     </div>
 
-                    <div className="space-y-2 text-sm text-muted-foreground font-body">
-                      <p>{eventDate ? `Event date: ${new Date(eventDate).toLocaleDateString()}` : "Event date not added yet"}</p>
-                      <p>{invite.rsvpCount} RSVPs collected</p>
-                      <p>{invite.slug ? `/i/${invite.slug}` : "Share link unlocks after you choose a slug"}</p>
+                    {/* Info row */}
+                    <div className="space-y-1.5 text-sm text-muted-foreground font-body mb-4">
+                      <p>{eventDate ? `Event: ${new Date(eventDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : "Event date not added yet"}</p>
+                      <p>{invite.rsvpCount} {invite.rsvpCount === 1 ? "response" : "responses"} collected</p>
+                      {isPublished && invite.slug && (
+                        <button
+                          onClick={() => handleCopySlug(invite.slug!)}
+                          className="flex items-center gap-1.5 text-xs text-primary hover:underline focus:outline-none"
+                        >
+                          {copiedSlug === invite.slug ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                          {copiedSlug === invite.slug ? "Copied!" : `/i/${invite.slug}`}
+                        </button>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-5">
-                      <Button asChild variant="outline" size="sm">
-                        <Link to={invite.status === "draft" ? `/create/${invite.id}` : `/dashboard/invites/${invite.id}/edit`}>Edit</Link>
-                      </Button>
-                      <Button asChild variant="outline" size="sm">
-                        <Link to={`/dashboard/invites/${invite.id}/operations`}>Operations</Link>
-                      </Button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      {invite.status === "published" && invite.slug ? (
-                        <Button asChild size="sm">
+                    {/* Action buttons — primary actions visible, secondary in dropdown */}
+                    {isPublished && invite.slug ? (
+                      <div className="flex gap-2">
+                        <Button asChild size="sm" className="flex-1">
                           <Link to={`/dashboard/invites/${invite.id}/rsvps`}>View RSVPs</Link>
                         </Button>
-                      ) : (
-                        <Button asChild size="sm">
-                          <Link to={invite.status === "draft" ? `/create/${invite.id}` : `/dashboard/invites/${invite.id}/edit`}>Continue</Link>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => navigate(`/dashboard/invites/${invite.id}/operations`)}
+                        >
+                          Manage Event
                         </Button>
-                      )}
-                      <Button asChild variant="outline" size="sm">
-                        <Link to={`/dashboard/invites/${invite.id}/operations`}>Guest Setup</Link>
-                      </Button>
-                    </div>
-
-                    {invite.status === "published" && invite.slug && (
-                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        <Button asChild variant="outline" size="sm">
-                          <Link to={`/i/${invite.slug}`} target="_blank">Open Invite</Link>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="px-2.5"
+                          onClick={() => setShareInviteId(invite.id)}
+                          aria-label="Share invite"
+                        >
+                          <Share2 className="w-4 h-4" />
                         </Button>
-                        <Button size="sm" onClick={() => setShareInviteId(invite.id)}>Share</Button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button asChild size="sm" className="flex-1">
+                          <Link to={editPath}>{isDraft ? "Edit Draft" : "Edit Invite"}</Link>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => navigate(`/dashboard/invites/${invite.id}/operations`)}
+                        >
+                          Manage Event
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -298,6 +415,7 @@ const Dashboard = () => {
         )}
       </div>
 
+      {/* Share modal */}
       {shareInviteId && (() => {
         const invite = invites.find((item) => item.id === shareInviteId);
         if (!invite?.slug) return null;
@@ -322,6 +440,7 @@ const Dashboard = () => {
         );
       })()}
 
+      {/* Delete confirmation */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 backdrop-blur-sm px-4">
           <div className="bg-card rounded-xl border border-border p-6 max-w-sm w-full shadow-xl">

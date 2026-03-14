@@ -2,11 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   BellRing,
+  ChevronDown,
   Copy,
   Download,
+  ExternalLink,
   Globe2,
   Hotel,
+  ListChecks,
   Mail,
+  Pencil,
   Plane,
   Plus,
   ShieldCheck,
@@ -35,6 +39,16 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
 import { getInviteHeadline } from "@/utils/invite";
 
 const availableLanguages = [
@@ -569,20 +583,23 @@ const InviteOperations = () => {
       <nav className="sticky top-0 z-40 border-b border-border bg-card/85 backdrop-blur-sm">
         <div className="container flex h-16 items-center justify-between gap-4 px-4">
           <div className="min-w-0">
-            <Link to="/" className="font-display text-xl font-bold">Shyara</Link>
-            <p className="hidden truncate text-sm text-muted-foreground md:block">
-              Operations for <span className="font-medium text-foreground">{headline}</span>
-            </p>
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild>
+                    <Link to="/dashboard">Dashboard</Link>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage className="max-w-[180px] truncate">{headline}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="hidden sm:inline-flex">{workspace.accessRole}</Badge>
-            <Button asChild variant="outline" size="sm">
-              <Link to={`/dashboard/invites/${inviteId}/edit`}>Edit Invite</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link to={`/i/${workspace.invite.slug}`} target="_blank">Open Live Invite</Link>
-            </Button>
-          </div>
+          <Badge variant="secondary" className="hidden sm:inline-flex capitalize shrink-0">
+            {workspace.accessRole}
+          </Badge>
         </div>
       </nav>
 
@@ -609,44 +626,60 @@ const InviteOperations = () => {
             <p className="mt-2 text-xs text-muted-foreground">Guests currently needing accommodation.</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Broadcasts</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Updates Sent</p>
             <p className="mt-2 text-3xl font-display font-bold">{workspace.broadcasts.length}</p>
-            <p className="mt-2 text-xs text-muted-foreground">Recent host updates and reminders sent.</p>
+            <p className="mt-2 text-xs text-muted-foreground">Updates and reminders sent to guests.</p>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="font-display text-3xl font-bold">Guest operations workspace</h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Configure RSVP limits, keep guest travel and stay details organized, send segmented updates, and export vendor-ready sheets.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {workspace.permissions.map((permission) => (
-                <Badge key={permission} variant="outline" className="capitalize">
-                  {permission.replace(/_/g, " ")}
-                </Badge>
-              ))}
-            </div>
-          </div>
+        {/* Quick-action strip */}
+        <div className="flex flex-wrap gap-3">
+          <Button asChild variant="outline" size="sm">
+            <Link to={`/dashboard/invites/${inviteId}/rsvps`}>
+              <ListChecks className="w-4 h-4 mr-2" />
+              View Responses
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to={`/dashboard/invites/${inviteId}/edit`}>
+              <Pencil className="w-4 h-4 mr-2" />
+              Edit Invite Content
+            </Link>
+          </Button>
+          {workspace.invite.slug && (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/i/${workspace.invite.slug}`} target="_blank">
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open Live Invite
+              </Link>
+            </Button>
+          )}
         </div>
 
         <Tabs defaultValue="guests" className="space-y-4">
           <TabsList className="h-auto flex-wrap gap-2 bg-transparent p-0">
-            <TabsTrigger value="guests">Guests & RSVP</TabsTrigger>
-            <TabsTrigger value="broadcasts">Broadcasts</TabsTrigger>
-            <TabsTrigger value="workspace">Workspace</TabsTrigger>
+            <TabsTrigger value="guests">Guest List</TabsTrigger>
+            <TabsTrigger value="broadcasts">Send Updates</TabsTrigger>
             <TabsTrigger value="languages">Languages</TabsTrigger>
-            <TabsTrigger value="ops">Ops Pack</TabsTrigger>
+            <TabsTrigger value="workspace">Team Access</TabsTrigger>
+            <TabsTrigger value="ops">Export & Reports</TabsTrigger>
           </TabsList>
 
           <TabsContent value="guests" className="space-y-6">
+            {/* Orientation banner */}
+            <div className="rounded-xl bg-muted/30 border border-border px-5 py-4 flex items-start gap-3">
+              <Users className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+              <p className="text-sm text-muted-foreground font-body">
+                Configure what your guests see when they RSVP, then manage your guest list below. Add guests ahead of time to track attendance and logistics per person.
+              </p>
+            </div>
+
+            <section>
+              <h2 className="font-display text-xl font-semibold mb-4">RSVP Form Setup</h2>
             <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <h2 className="font-display text-2xl font-semibold">Custom RSVP setup</h2>
+                  <h3 className="font-display text-2xl font-semibold">Custom RSVP setup</h3>
                   <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                     Decide what guests can answer after purchase, keep the form practical, and avoid collecting information your team will not use.
                   </p>
@@ -853,14 +886,19 @@ const InviteOperations = () => {
                 )}
               </div>
             </div>
+            </section>
 
+            <Separator />
+
+            <section>
+              <h2 className="font-display text-xl font-semibold mb-4">Guest List</h2>
             <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
               <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h2 className="font-display text-2xl font-semibold">
+                    <h3 className="font-display text-2xl font-semibold">
                       {editingGuestId ? "Edit guest" : "Add guest"}
-                    </h2>
+                    </h3>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Keep each guest record close to real planning needs: household, travel, stay, and support notes.
                     </p>
@@ -889,7 +927,7 @@ const InviteOperations = () => {
                     <Input value={guestForm.household ?? ""} onChange={(event) => updateGuestForm("household", event.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Audience segment</Label>
+                    <Label>Guest group</Label>
                     <Input value={guestForm.audienceSegment ?? "general"} onChange={(event) => updateGuestForm("audienceSegment", event.target.value)} />
                   </div>
                   <div className="space-y-2">
@@ -907,7 +945,7 @@ const InviteOperations = () => {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Invitation status</Label>
+                    <Label>Outreach status</Label>
                     <select
                       value={guestForm.invitationStatus ?? "invited"}
                       onChange={(event) => updateGuestForm("invitationStatus", event.target.value)}
@@ -920,7 +958,7 @@ const InviteOperations = () => {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Current RSVP</Label>
+                    <Label>Their response</Label>
                     <select
                       value={guestForm.response ?? ""}
                       onChange={(event) => updateGuestForm("response", event.target.value || undefined)}
@@ -933,7 +971,7 @@ const InviteOperations = () => {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Total guests</Label>
+                    <Label>Total in party</Label>
                     <Input
                       type="number"
                       min={1}
@@ -982,15 +1020,23 @@ const InviteOperations = () => {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-border p-4 space-y-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-medium">Travel and stay</p>
-                      <p className="text-xs text-muted-foreground">
-                        Track hotel assignments, transport need, and support notes for each guest.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-6">
+                <Collapsible
+                  className="rounded-xl border border-border p-4 space-y-4"
+                  defaultOpen={Boolean(guestForm.stayNeeded || guestForm.shuttleRequired)}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <CollapsibleTrigger asChild>
+                      <button className="flex items-center gap-2 text-left group">
+                        <div>
+                          <p className="font-medium">Travel and stay</p>
+                          <p className="text-xs text-muted-foreground">
+                            Track hotel assignments, transport need, and support notes for each guest.
+                          </p>
+                        </div>
+                        <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0 transition-transform group-data-[state=open]:rotate-180 ml-2" />
+                      </button>
+                    </CollapsibleTrigger>
+                    <div className="flex items-center gap-4 shrink-0">
                       <label className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
@@ -1010,6 +1056,7 @@ const InviteOperations = () => {
                     </div>
                   </div>
 
+                  <CollapsibleContent>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
                     <div className="space-y-2">
                       <Label>Hotel name</Label>
@@ -1072,7 +1119,8 @@ const InviteOperations = () => {
                       />
                     </div>
                   </div>
-                </div>
+                  </CollapsibleContent>
+                </Collapsible>
 
                 <Button disabled={!canManageGuests || savingGuest} onClick={saveGuest}>
                   {savingGuest ? "Saving..." : editingGuestId ? "Save Guest Changes" : "Add Guest"}
@@ -1082,7 +1130,7 @@ const InviteOperations = () => {
               <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <h2 className="font-display text-2xl font-semibold">Guest list</h2>
+                    <h3 className="font-display text-2xl font-semibold">Guest list</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Copy unique links with preselected language, edit household logistics, and spot missing guest details fast.
                     </p>
@@ -1189,15 +1237,23 @@ const InviteOperations = () => {
                 )}
               </div>
             </div>
+            </section>
           </TabsContent>
 
           <TabsContent value="broadcasts" className="space-y-6">
+            {/* Orientation banner */}
+            <div className="rounded-xl bg-muted/30 border border-border px-5 py-4 flex items-start gap-3">
+              <BellRing className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+              <p className="text-sm text-muted-foreground font-body">
+                Send targeted updates to your guests by group, response, or language. A full history of every update you've sent is shown on the right.
+              </p>
+            </div>
             <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
               <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
                 <div className="flex items-start gap-3">
                   <BellRing className="mt-1 h-5 w-5 text-primary" />
                   <div>
-                    <h2 className="font-display text-2xl font-semibold">Targeted broadcast</h2>
+                    <h2 className="font-display text-2xl font-semibold">Compose an update</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Send operational updates only to the guests who need them and keep a trackable history of who received each message.
                     </p>
@@ -1346,7 +1402,7 @@ const InviteOperations = () => {
                 </div>
 
                 <Button disabled={!canSendBroadcasts || sendingBroadcast} onClick={sendBroadcast}>
-                  {sendingBroadcast ? "Sending..." : "Send Broadcast"}
+                  {sendingBroadcast ? "Sending..." : "Send Update"}
                 </Button>
               </div>
 
@@ -1428,6 +1484,13 @@ const InviteOperations = () => {
           </TabsContent>
 
           <TabsContent value="workspace" className="space-y-6">
+            {/* Orientation banner */}
+            <div className="rounded-xl bg-muted/30 border border-border px-5 py-4 flex items-start gap-3">
+              <ShieldCheck className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+              <p className="text-sm text-muted-foreground font-body">
+                Invite a partner, planner, or assistant and control exactly what they can see and do. Only the owner can add or remove team members.
+              </p>
+            </div>
             <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
               <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
                 <div className="flex items-start gap-3">
@@ -1548,6 +1611,13 @@ const InviteOperations = () => {
             </div>
           </TabsContent>
           <TabsContent value="languages" className="space-y-6">
+            {/* Orientation banner */}
+            <div className="rounded-xl bg-muted/30 border border-border px-5 py-4 flex items-start gap-3">
+              <Globe2 className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+              <p className="text-sm text-muted-foreground font-body">
+                Enable and translate your invite for multi-language audiences. Guests can switch languages directly from the live invite page.
+              </p>
+            </div>
             <div className="rounded-2xl border border-border bg-card p-6 space-y-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-start gap-3">
@@ -1717,6 +1787,13 @@ const InviteOperations = () => {
           </TabsContent>
 
           <TabsContent value="ops" className="space-y-6">
+            {/* Orientation banner */}
+            <div className="rounded-xl bg-muted/30 border border-border px-5 py-4 flex items-start gap-3">
+              <Download className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+              <p className="text-sm text-muted-foreground font-body">
+                Download your guest list, logistics data, and event summaries. Share these files with caterers, venue teams, and coordinators.
+              </p>
+            </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-border bg-card p-5">
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Adults</p>
