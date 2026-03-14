@@ -13,6 +13,7 @@ export type CollaboratorPermission = (typeof COLLABORATOR_PERMISSIONS)[number];
 
 export const DEFAULT_LANGUAGE = "en";
 export const SUPPORTED_GUEST_LANGUAGES = ["en", "es", "fr", "de", "it"] as const;
+export const TECHNICAL_GUEST_COUNT_LIMIT = 9_999;
 
 export type CustomRsvpQuestion = {
   id: string;
@@ -26,7 +27,7 @@ export type CustomRsvpQuestion = {
 export type NormalizedRsvpSettings = {
   collectEmail: boolean;
   allowPlusOnes: boolean;
-  maxGuestCount: number;
+  maxGuestCount?: number;
   collectAdultsChildrenSplit: boolean;
   collectMealChoice: boolean;
   mealOptions: string[];
@@ -39,82 +40,265 @@ export type NormalizedRsvpSettings = {
   customQuestions: CustomRsvpQuestion[];
 };
 
+export type TranslationSyncStatus = "up_to_date" | "stale" | "failed";
+
+export type LocalizationTranslationMeta = {
+  status: TranslationSyncStatus;
+  sourceHash?: string;
+  translatedAt?: string;
+  lastRequestedAt?: string;
+  lastError?: string;
+  provider?: string;
+  model?: string;
+};
+
 export type LocalizationSettings = {
   defaultLanguage: string;
   enabledLanguages: string[];
   translations: Record<string, Record<string, unknown>>;
+  translationMeta: Record<string, LocalizationTranslationMeta>;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+const normalizeBoolean = (value: unknown, fallback: boolean) =>
+  typeof value === "boolean" ? value : fallback;
+
+const sanitizeStringList = (value: unknown, maxItems: number, maxLength: number) => {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  value.forEach((entry) => {
+    const candidate = String(entry ?? "").trim().slice(0, maxLength);
+    if (!candidate) return;
+    const key = candidate.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(candidate);
+  });
+
+  return result.slice(0, maxItems);
+};
+
+const clampGuestCount = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  const normalized = Math.trunc(parsed);
+  if (normalized < 1) {
+    return undefined;
+  }
+
+  return Math.min(normalized, TECHNICAL_GUEST_COUNT_LIMIT);
+};
+
+const normalizeQuestionTranslations = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const translations = Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([language, entry]) => [language, String(entry ?? "").trim()])
+      .filter(([, entry]) => entry.length > 0)
+  );
+
+  return Object.keys(translations).length > 0 ? translations : undefined;
+};
+
+const normalizeCustomQuestions = (value: unknown) => {
+  const questions = Array.isArray(value) ? value.slice(0, 6) : [];
+
+  return questions.map((question, index) => {
+    const raw = asRecord(question);
+    const typeValue = String(raw.type ?? "text");
+    const type = ["text", "textarea", "select", "boolean", "number"].includes(typeValue)
+      ? (typeValue as CustomRsvpQuestion["type"])
+      : "text";
+
+    return {
+      id: String(raw.id ?? `question_${index + 1}`).trim().slice(0, 50) || `question_${index + 1}`,
+      label: String(raw.label ?? `Question ${index + 1}`).trim().slice(0, 80) || `Question ${index + 1}`,
+      type,
+      required: raw.required === true,
+      options: type === "select" ? sanitizeStringList(raw.options, 6, 50) : undefined,
+      translations: normalizeQuestionTranslations(raw.translations),
+    };
+  });
 };
 
 export const normalizeRsvpSettings = (data: Record<string, unknown>): NormalizedRsvpSettings => {
-  const raw = (data.rsvpSettings ?? {}) as Record<string, unknown>;
-  const questions = Array.isArray(raw.customQuestions) ? raw.customQuestions.slice(0, 6) : [];
+  const raw = asRecord(data.rsvpSettings);
+  const legacyMealOptions = sanitizeStringList(data.mealOptions, 8, 50);
+  const mealOptions = sanitizeStringList(raw.mealOptions, 8, 50);
+  const maxGuestCountConfigured = raw.maxGuestCountConfigured === true;
+  const normalizedMaxGuestCount = clampGuestCount(raw.maxGuestCount);
+  const deadline =
+    typeof raw.deadline === "string" && raw.deadline.trim()
+      ? raw.deadline.trim()
+      : typeof data.rsvpDeadline === "string" && data.rsvpDeadline.trim()
+        ? data.rsvpDeadline.trim()
+        : undefined;
 
   return {
-    collectEmail: raw.collectEmail !== false,
-    allowPlusOnes: raw.allowPlusOnes !== false,
-    maxGuestCount: Math.min(Math.max(Number(raw.maxGuestCount ?? 4) || 4, 1), 12),
+    collectEmail: normalizeBoolean(raw.collectEmail, true),
+    allowPlusOnes: normalizeBoolean(raw.allowPlusOnes, true),
+    maxGuestCount: maxGuestCountConfigured ? normalizedMaxGuestCount : undefined,
     collectAdultsChildrenSplit: raw.collectAdultsChildrenSplit === true,
-    collectMealChoice: raw.collectMealChoice === true,
-    mealOptions: Array.isArray(raw.mealOptions) ? raw.mealOptions.map(String).filter(Boolean).slice(0, 8) : [],
-    collectDietaryRestrictions: raw.collectDietaryRestrictions !== false,
+    collectMealChoice: raw.collectMealChoice === true || mealOptions.length > 0 || legacyMealOptions.length > 0,
+    mealOptions: mealOptions.length > 0 ? mealOptions : legacyMealOptions,
+    collectDietaryRestrictions: normalizeBoolean(raw.collectDietaryRestrictions, true),
     collectTravelPlans: raw.collectTravelPlans === true,
     collectStayNeeds: raw.collectStayNeeds === true,
     collectHousehold: raw.collectHousehold === true,
     collectPhone: raw.collectPhone === true,
-    deadline: typeof raw.deadline === "string" && raw.deadline ? raw.deadline : undefined,
-    customQuestions: questions.map((question, index) => {
-      const value = (question ?? {}) as Record<string, unknown>;
-      return {
-        id: typeof value.id === "string" && value.id ? value.id : `question_${index + 1}`,
-        label: String(value.label ?? `Question ${index + 1}`).slice(0, 80),
-        type: ["text", "textarea", "select", "boolean", "number"].includes(String(value.type))
-          ? (value.type as CustomRsvpQuestion["type"])
-          : "text",
-        required: value.required === true,
-        options: Array.isArray(value.options)
-          ? value.options.map(String).filter(Boolean).slice(0, 6)
-          : undefined,
-        translations: typeof value.translations === "object" && value.translations
-          ? Object.fromEntries(
-              Object.entries(value.translations as Record<string, unknown>).map(([key, entry]) => [key, String(entry)])
-            )
-          : undefined,
-      };
-    }),
+    deadline,
+    customQuestions: normalizeCustomQuestions(raw.customQuestions),
   };
 };
 
-export const normalizeLocalizationSettings = (data: Record<string, unknown>): LocalizationSettings => {
-  const raw = (data.localization ?? {}) as Record<string, unknown>;
-  const enabledLanguages = Array.isArray(raw.enabledLanguages)
-    ? raw.enabledLanguages.map(String).filter((language) => SUPPORTED_GUEST_LANGUAGES.includes(language as never)).slice(0, 5)
-    : [DEFAULT_LANGUAGE];
+const normalizeTranslationMeta = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {} as Record<string, LocalizationTranslationMeta>;
+  }
 
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).flatMap(([language, entry]) => {
+      const raw = asRecord(entry);
+      const statusValue = String(raw.status ?? "");
+
+      if (!["up_to_date", "stale", "failed"].includes(statusValue)) {
+        return [];
+      }
+
+      const meta: LocalizationTranslationMeta = {
+        status: statusValue as TranslationSyncStatus,
+      };
+
+      if (typeof raw.sourceHash === "string" && raw.sourceHash.trim()) meta.sourceHash = raw.sourceHash.trim();
+      if (typeof raw.translatedAt === "string" && raw.translatedAt.trim()) meta.translatedAt = raw.translatedAt.trim();
+      if (typeof raw.lastRequestedAt === "string" && raw.lastRequestedAt.trim()) meta.lastRequestedAt = raw.lastRequestedAt.trim();
+      if (typeof raw.lastError === "string" && raw.lastError.trim()) meta.lastError = raw.lastError.trim();
+      if (typeof raw.provider === "string" && raw.provider.trim()) meta.provider = raw.provider.trim();
+      if (typeof raw.model === "string" && raw.model.trim()) meta.model = raw.model.trim();
+
+      return [[language, meta]];
+    })
+  );
+};
+
+export const normalizeLocalizationSettings = (data: Record<string, unknown>): LocalizationSettings => {
+  const raw = asRecord(data.localization);
+  const requestedLanguages = Array.isArray(raw.enabledLanguages)
+    ? raw.enabledLanguages
+        .map((language) => String(language ?? "").trim())
+        .filter((language): language is typeof DEFAULT_LANGUAGE => SUPPORTED_GUEST_LANGUAGES.includes(language as typeof DEFAULT_LANGUAGE))
+    : [DEFAULT_LANGUAGE];
+  const enabledLanguages = Array.from(new Set(requestedLanguages.length > 0 ? requestedLanguages : [DEFAULT_LANGUAGE])).slice(0, 5);
   const defaultLanguage =
     typeof raw.defaultLanguage === "string" && enabledLanguages.includes(raw.defaultLanguage)
       ? raw.defaultLanguage
       : enabledLanguages[0] ?? DEFAULT_LANGUAGE;
+  const translations = raw.translations && typeof raw.translations === "object" && !Array.isArray(raw.translations)
+    ? (raw.translations as Record<string, Record<string, unknown>>)
+    : {};
 
   return {
     defaultLanguage,
-    enabledLanguages: Array.from(new Set(enabledLanguages.length > 0 ? enabledLanguages : [DEFAULT_LANGUAGE])),
-    translations: typeof raw.translations === "object" && raw.translations
-      ? (raw.translations as Record<string, Record<string, unknown>>)
-      : {},
+    enabledLanguages,
+    translations,
+    translationMeta: normalizeTranslationMeta(raw.translationMeta),
   };
 };
+
+const toJsonObject = (value: Prisma.JsonValue | null) =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? ({ ...(value as Prisma.JsonObject) } satisfies Prisma.InputJsonObject)
+    : ({} satisfies Prisma.InputJsonObject);
+
+const serializeRsvpSettings = (settings: NormalizedRsvpSettings): Prisma.InputJsonObject => ({
+  collectEmail: settings.collectEmail,
+  allowPlusOnes: settings.allowPlusOnes,
+  ...(settings.maxGuestCount !== undefined
+    ? { maxGuestCount: settings.maxGuestCount, maxGuestCountConfigured: true }
+    : { maxGuestCountConfigured: false }),
+  collectAdultsChildrenSplit: settings.collectAdultsChildrenSplit,
+  collectMealChoice: settings.collectMealChoice,
+  mealOptions: settings.mealOptions,
+  collectDietaryRestrictions: settings.collectDietaryRestrictions,
+  collectTravelPlans: settings.collectTravelPlans,
+  collectStayNeeds: settings.collectStayNeeds,
+  collectHousehold: settings.collectHousehold,
+  collectPhone: settings.collectPhone,
+  ...(settings.deadline ? { deadline: settings.deadline } : {}),
+  customQuestions: settings.customQuestions,
+});
+
+const serializeLocalizationSettings = (settings: LocalizationSettings): Prisma.InputJsonObject => ({
+  defaultLanguage: settings.defaultLanguage,
+  enabledLanguages: settings.enabledLanguages,
+  translations: settings.translations as Prisma.InputJsonObject,
+  translationMeta: settings.translationMeta as Prisma.InputJsonObject,
+});
 
 export const mergeInviteData = (
   currentData: Prisma.JsonValue | null,
   patch: Record<string, unknown>
 ): Prisma.InputJsonValue => {
-  const current: Prisma.InputJsonObject = currentData && typeof currentData === "object" && !Array.isArray(currentData)
-    ? { ...(currentData as Prisma.JsonObject) }
-    : {};
+  const current = toJsonObject(currentData);
 
   return {
     ...current,
     ...(patch as Prisma.InputJsonObject),
+  };
+};
+
+export const normalizeInviteDataForPersistence = (data: Record<string, unknown>): Prisma.InputJsonValue => {
+  const next = { ...data };
+  delete next.mealOptions;
+  delete next.rsvpDeadline;
+
+  const normalized = {
+    ...next,
+    rsvpSettings: serializeRsvpSettings(normalizeRsvpSettings(next)),
+    localization: serializeLocalizationSettings(normalizeLocalizationSettings(next)),
+  };
+
+  return normalized as Prisma.InputJsonValue;
+};
+
+export const setInviteRsvpSettings = (
+  currentData: Prisma.JsonValue | null,
+  settings: NormalizedRsvpSettings
+): Prisma.InputJsonValue => {
+  const current = toJsonObject(currentData);
+  delete current.mealOptions;
+  delete current.rsvpDeadline;
+
+  return {
+    ...current,
+    rsvpSettings: serializeRsvpSettings(settings),
+  };
+};
+
+export const setInviteLocalization = (
+  currentData: Prisma.JsonValue | null,
+  localization: LocalizationSettings
+): Prisma.InputJsonValue => {
+  const current = toJsonObject(currentData);
+
+  return {
+    ...current,
+    localization: serializeLocalizationSettings(localization),
   };
 };
 
@@ -162,6 +346,11 @@ export const getInviteAccess = async (userId: string, inviteId: string) => {
   return { invite, isOwner: false as const, collaborator };
 };
 
+export const collaboratorHasPermission = (
+  collaborator: { permissions: string[] } | null,
+  permission: CollaboratorPermission
+) => collaborator?.permissions.includes(permission) ?? false;
+
 export const collaboratorHasAnyPermission = (
   collaborator: { permissions: string[] } | null,
   permissions: CollaboratorPermission[]
@@ -169,6 +358,11 @@ export const collaboratorHasAnyPermission = (
   if (!collaborator) return false;
   return collaborator.permissions.some((permission) => permissions.includes(permission as CollaboratorPermission));
 };
+
+export const getMissingCollaboratorPermissions = (
+  collaborator: { permissions: string[] } | null,
+  permissions: CollaboratorPermission[]
+) => permissions.filter((permission) => !collaboratorHasPermission(collaborator, permission));
 
 export const pickGuestLanguage = (
   inviteData: Record<string, unknown>,
@@ -249,7 +443,9 @@ export const buildOperationsSummary = (guests: Array<{
   const followUpTasks = [
     ...(Object.keys(mealCounts).includes("Unspecified") ? ["Follow up on missing meal preferences."] : []),
     ...(missingInfoAlerts.length > 0 ? ["Resolve guest records with missing operational information."] : []),
-    ...(attending.some((guest) => guest.stayNeeded && guest.roomCount === 0) ? ["Assign rooms for guests who requested accommodation."] : []),
+    ...(attending.some((guest) => guest.stayNeeded && guest.roomCount === 0)
+      ? ["Assign rooms for guests who requested accommodation."]
+      : []),
     ...(attending.some((guest) => guest.shuttleRequired) ? ["Confirm shuttle capacity against current demand."] : []),
   ];
 

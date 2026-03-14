@@ -28,6 +28,17 @@ interface InviteFormProps {
   isEditing?: boolean;
 }
 
+const deriveInitialFormData = (data: Record<string, any> | undefined) => {
+  const source = data ?? {};
+  const rsvpSettings = source.rsvpSettings && typeof source.rsvpSettings === 'object' ? source.rsvpSettings : {};
+
+  return {
+    ...source,
+    mealOptions: source.mealOptions ?? rsvpSettings.mealOptions,
+    rsvpDeadline: source.rsvpDeadline ?? rsvpSettings.deadline,
+  };
+};
+
 const stepDefs = [
   {
     key: 'basic',
@@ -66,7 +77,7 @@ const sectionLabels: Record<string, string> = {
 };
 
 const InviteForm = ({ config, invite, isEditing = false }: InviteFormProps) => {
-  const [formData, setFormData] = useState<Record<string, any>>(invite.data || {});
+  const [formData, setFormData] = useState<Record<string, any>>(deriveInitialFormData(invite.data));
   const [slug, setSlug] = useState(invite.slug || '');
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);

@@ -1,12 +1,38 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { normalizeLocalizationSettings, normalizeRsvpSettings, pickGuestLanguage } from "../services/inviteOps";
+import {
+  normalizeLocalizationSettings,
+  normalizeRsvpSettings,
+  pickGuestLanguage,
+  TECHNICAL_GUEST_COUNT_LIMIT,
+} from "../services/inviteOps";
 import { sendRsvpConfirmationEmail, sendRsvpNotificationEmail } from "../services/email";
 import { getCustomerAcquisitionStatus } from "../services/customerAcquisitionLock";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 
 const router = Router();
+
+const uniq = <T,>(values: T[]) => Array.from(new Set(values));
+
+const optionalText = (value: string | undefined) => {
+  const normalized = String(value ?? "").trim();
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const validatePartyCounts = ({
+  guestCount,
+  adultCount,
+  childCount,
+}: {
+  guestCount: number;
+  adultCount?: number;
+  childCount?: number;
+}) => {
+  if ((adultCount ?? 0) + (childCount ?? 0) > guestCount) {
+    throw new AppError("Adults and children cannot exceed total guests", 400);
+  }
+};
 
 router.get(
   "/platform-status",
@@ -111,6 +137,9 @@ router.get(
 
     return sendSuccess(res, {
       ...settings,
+      mealOptions: viewer?.mealChoice
+        ? uniq([...settings.mealOptions, viewer.mealChoice])
+        : settings.mealOptions,
       language,
       enabledLanguages: localization.enabledLanguages,
       viewer: viewer
@@ -145,9 +174,9 @@ const submitRsvpSchema = z.object({
   phone: z.string().max(25).optional(),
   household: z.string().max(100).optional(),
   response: z.enum(["yes", "no", "maybe"]),
-  guestCount: z.coerce.number().int().min(1).max(12),
-  adultCount: z.coerce.number().int().min(0).max(12).optional(),
-  childCount: z.coerce.number().int().min(0).max(12).optional(),
+  guestCount: z.coerce.number().int().min(1).max(TECHNICAL_GUEST_COUNT_LIMIT),
+  adultCount: z.coerce.number().int().min(0).max(TECHNICAL_GUEST_COUNT_LIMIT).optional(),
+  childCount: z.coerce.number().int().min(0).max(TECHNICAL_GUEST_COUNT_LIMIT).optional(),
   message: z.string().max(1000).optional(),
   mealChoice: z.string().max(100).optional(),
   dietaryRestrictions: z.string().max(500).optional(),
@@ -201,28 +230,74 @@ router.post(
     }
 
     const selectedLanguage = pickGuestLanguage(inviteData, body.language, guest?.language);
+    const reservedGuestCount = guest?.guestCount ?? 1;
+    const effectiveGuestCount = body.response !== "yes"
+      ? 1
+      : settings.allowPlusOnes === false
+        ? reservedGuestCount
+        : body.guestCount;
+
+    if (body.response === "yes" && settings.maxGuestCount !== undefined && effectiveGuestCount > settings.maxGuestCount) {
+      throw new AppError(`You can RSVP for up to ${settings.maxGuestCount} guest(s) for this event`, 400);
+    }
+
+    validatePartyCounts({
+      guestCount: effectiveGuestCount,
+      adultCount: body.response === "yes" ? body.adultCount : undefined,
+      childCount: body.response === "yes" ? body.childCount : undefined,
+    });
+
+    const allowedMealChoices = new Set(settings.mealOptions);
+    if (guest?.mealChoice) {
+      allowedMealChoices.add(guest.mealChoice);
+    }
+
+    const normalizedMealChoice = optionalText(body.mealChoice);
+    if (normalizedMealChoice && allowedMealChoices.size > 0 && !allowedMealChoices.has(normalizedMealChoice)) {
+      throw new AppError("Meal choice must match one of the host's configured options", 400);
+    }
+
+    const filteredCustomAnswers = Object.fromEntries(
+      Object.entries(body.customAnswers ?? {}).filter(([questionId, value]) =>
+        settings.customQuestions.some((question) => question.id === questionId) &&
+        value !== "" &&
+        value !== undefined &&
+        value !== null
+      )
+    );
+
+    const effectiveAdultCount = body.response === "yes" && settings.collectAdultsChildrenSplit ? body.adultCount : undefined;
+    const effectiveChildCount = body.response === "yes" && settings.collectAdultsChildrenSplit ? body.childCount : undefined;
+    const effectiveMealChoice = body.response === "yes" && settings.collectMealChoice ? normalizedMealChoice : undefined;
+    const effectiveDietaryRestrictions = body.response === "yes" && settings.collectDietaryRestrictions
+      ? optionalText(body.dietaryRestrictions)
+      : undefined;
+    const effectiveStayNeeded = body.response === "yes" && settings.collectStayNeeds ? Boolean(body.stayNeeded) : false;
+    const effectiveRoomRequirement = effectiveStayNeeded ? optionalText(body.roomRequirement) : undefined;
+    const effectiveTransportNeeded = body.response === "yes" && settings.collectTravelPlans ? Boolean(body.transportNeeded) : false;
+    const effectiveTransportMode = effectiveTransportNeeded ? optionalText(body.transportMode) : undefined;
 
     if (guest) {
       guest = await prisma.inviteGuest.update({
         where: { id: guest.id },
         data: {
-          name: body.name,
+          name: body.name.trim(),
           email: normalizedEmail ?? guest.email,
-          phone: body.phone ?? guest.phone,
-          household: body.household ?? guest.household,
+          phone: optionalText(body.phone) ?? guest.phone,
+          household: optionalText(body.household) ?? guest.household,
           language: selectedLanguage,
           response: body.response,
-          guestCount: body.guestCount,
-          adultCount: body.adultCount,
-          childCount: body.childCount,
-          message: body.message,
-          mealChoice: body.mealChoice,
-          dietaryRestrictions: body.dietaryRestrictions,
-          customAnswers: body.customAnswers,
-          stayNeeded: body.stayNeeded ?? false,
-          roomType: body.roomRequirement,
-          shuttleRequired: body.transportNeeded ?? false,
-          transportMode: body.transportMode,
+          guestCount: effectiveGuestCount,
+          adultCount: effectiveAdultCount,
+          childCount: effectiveChildCount,
+          message: optionalText(body.message),
+          mealChoice: effectiveMealChoice,
+          dietaryRestrictions: effectiveDietaryRestrictions,
+          customAnswers: filteredCustomAnswers,
+          stayNeeded: effectiveStayNeeded,
+          roomType: effectiveRoomRequirement,
+          shuttleRequired: effectiveTransportNeeded,
+          transportMode: effectiveTransportMode,
           rsvpSubmittedAt: new Date(),
         },
       });
@@ -230,23 +305,23 @@ router.post(
       guest = await prisma.inviteGuest.create({
         data: {
           inviteId: invite.id,
-          name: body.name,
+          name: body.name.trim(),
           email: normalizedEmail,
-          phone: body.phone,
-          household: body.household,
+          phone: optionalText(body.phone),
+          household: optionalText(body.household),
           language: selectedLanguage,
           response: body.response,
-          guestCount: body.guestCount,
-          adultCount: body.adultCount,
-          childCount: body.childCount,
-          message: body.message,
-          mealChoice: body.mealChoice,
-          dietaryRestrictions: body.dietaryRestrictions,
-          customAnswers: body.customAnswers,
-          stayNeeded: body.stayNeeded ?? false,
-          roomType: body.roomRequirement,
-          shuttleRequired: body.transportNeeded ?? false,
-          transportMode: body.transportMode,
+          guestCount: effectiveGuestCount,
+          adultCount: effectiveAdultCount,
+          childCount: effectiveChildCount,
+          message: optionalText(body.message),
+          mealChoice: effectiveMealChoice,
+          dietaryRestrictions: effectiveDietaryRestrictions,
+          customAnswers: filteredCustomAnswers,
+          stayNeeded: effectiveStayNeeded,
+          roomType: effectiveRoomRequirement,
+          shuttleRequired: effectiveTransportNeeded,
+          transportMode: effectiveTransportMode,
           rsvpSubmittedAt: new Date(),
         },
       });
@@ -268,17 +343,17 @@ router.post(
       name: body.name,
       email: normalizedEmail,
       response: body.response,
-      guestCount: body.guestCount,
-      adultCount: body.adultCount,
-      childCount: body.childCount,
-      message: body.message,
-      mealChoice: body.mealChoice,
-      dietaryRestrictions: body.dietaryRestrictions,
-      customAnswers: body.customAnswers,
-      stayNeeded: body.stayNeeded,
-      roomRequirement: body.roomRequirement,
-      transportNeeded: body.transportNeeded,
-      transportMode: body.transportMode,
+      guestCount: effectiveGuestCount,
+      adultCount: effectiveAdultCount,
+      childCount: effectiveChildCount,
+      message: optionalText(body.message),
+      mealChoice: effectiveMealChoice,
+      dietaryRestrictions: effectiveDietaryRestrictions,
+      customAnswers: filteredCustomAnswers,
+      stayNeeded: effectiveStayNeeded,
+      roomRequirement: effectiveRoomRequirement,
+      transportNeeded: effectiveTransportNeeded,
+      transportMode: effectiveTransportMode,
       language: selectedLanguage,
       ipAddress: req.ip,
       submittedAt: new Date(),

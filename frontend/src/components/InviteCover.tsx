@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getLiveInviteCopy } from '@/utils/liveInviteCopy';
 
 interface InviteCoverProps {
   title: string;
@@ -8,6 +9,7 @@ interface InviteCoverProps {
   time?: string;
   slug: string;
   isPreview?: boolean;
+  language?: string;
   theme?: 'gold' | 'dark-floral' | 'confetti' | 'pastel-floral' | 'ivory-classic' | 'rustic-warm' | 'celestial-navy' | 'golden-warm' | 'rose-pink' | 'neon-dark' | 'star-blue' | 'sweet-pink' | 'corporate-dark' | 'corporate-light' | 'anniversary-warm' | 'default';
   onOpen: () => void;
 }
@@ -191,7 +193,7 @@ function getExitVariant(type: ExitType, side?: 'left' | 'right') {
   }
 }
 
-const CoverContent = ({ s, subtitle, title, date, time, showSkip, handleOpen }: {
+const CoverContent = ({ s, subtitle, title, date, time, showSkip, handleOpen, language }: {
   s: typeof themeStyles.default;
   subtitle?: string;
   title: string;
@@ -199,8 +201,12 @@ const CoverContent = ({ s, subtitle, title, date, time, showSkip, handleOpen }: 
   time?: string;
   showSkip: boolean;
   handleOpen: () => void;
-}) => (
-  <>
+  language?: string;
+}) => {
+  const copy = getLiveInviteCopy(language);
+
+  return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: -30 }}
       animate={{ opacity: 1, y: 0 }}
@@ -216,7 +222,7 @@ const CoverContent = ({ s, subtitle, title, date, time, showSkip, handleOpen }: 
       transition={{ delay: 0.3, duration: 0.6 }}
       className={`text-xs uppercase tracking-[0.4em] ${s.text} mb-6 font-body`}
     >
-      {subtitle || "You're Invited"}
+      {subtitle || copy.yourInvited}
     </motion.p>
 
     <motion.h1
@@ -258,7 +264,7 @@ const CoverContent = ({ s, subtitle, title, date, time, showSkip, handleOpen }: 
       onClick={handleOpen}
       className={`px-10 py-4 rounded-full font-body font-medium text-sm tracking-wide transition-all duration-300 shadow-lg hover:shadow-xl ${s.btn}`}
     >
-      Open Invitation
+      {copy.openInvitation}
     </motion.button>
 
     <AnimatePresence>
@@ -270,7 +276,7 @@ const CoverContent = ({ s, subtitle, title, date, time, showSkip, handleOpen }: 
           onClick={handleOpen}
           className={`absolute bottom-8 text-xs ${s.text} font-body hover:underline`}
         >
-          Skip Intro →
+          {copy.skipIntro} →
         </motion.button>
       )}
     </AnimatePresence>
@@ -283,10 +289,11 @@ const CoverContent = ({ s, subtitle, title, date, time, showSkip, handleOpen }: 
     >
       ✦
     </motion.div>
-  </>
-);
+    </>
+  );
+};
 
-const InviteCover = ({ title, subtitle, date, time, slug, isPreview, theme = 'default', onOpen }: InviteCoverProps) => {
+const InviteCover = ({ title, subtitle, date, time, slug, isPreview, language, theme = 'default', onOpen }: InviteCoverProps) => {
   const [show, setShow] = useState(true);
   const [showSkip, setShowSkip] = useState(false);
   const storageKey = `shyara_intro_seen_${slug}`;
@@ -310,7 +317,7 @@ const InviteCover = ({ title, subtitle, date, time, slug, isPreview, theme = 'de
     onOpen();
   };
 
-  const contentProps = { s, subtitle, title, date, time, showSkip, handleOpen };
+  const contentProps = { s, subtitle, title, date, time, showSkip, handleOpen, language };
   const baseClass = `fixed inset-0 z-50 flex flex-col items-center justify-center p-8 text-center ${s.bg}`;
 
   return (

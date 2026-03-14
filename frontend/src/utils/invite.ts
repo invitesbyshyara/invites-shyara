@@ -76,6 +76,36 @@ export const formatSectionLabel = (section: string) =>
     .replace(/-/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
+const deepMergeLocalizedValue = (base: unknown, patch: unknown): unknown => {
+  if (patch === undefined) {
+    return base;
+  }
+
+  if (Array.isArray(base) && Array.isArray(patch)) {
+    const length = Math.max(base.length, patch.length);
+    return Array.from({ length }, (_, index) =>
+      deepMergeLocalizedValue(base[index], patch[index])
+    ).filter((entry) => entry !== undefined);
+  }
+
+  if (
+    base &&
+    patch &&
+    typeof base === "object" &&
+    typeof patch === "object" &&
+    !Array.isArray(base) &&
+    !Array.isArray(patch)
+  ) {
+    const merged: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+    Object.entries(patch as Record<string, unknown>).forEach(([key, value]) => {
+      merged[key] = deepMergeLocalizedValue(merged[key], value);
+    });
+    return merged;
+  }
+
+  return patch;
+};
+
 export const getLocalizedInviteData = (data: InviteData, language?: string) => {
   if (!language) return data;
 
@@ -90,12 +120,5 @@ export const getLocalizedInviteData = (data: InviteData, language?: string) => {
     return data;
   }
 
-  const localized = { ...data };
-  Object.entries(entries).forEach(([key, value]) => {
-    if (typeof value === "string" && value.trim()) {
-      localized[key] = value;
-    }
-  });
-
-  return localized;
+  return deepMergeLocalizedValue(data, entries) as InviteData;
 };

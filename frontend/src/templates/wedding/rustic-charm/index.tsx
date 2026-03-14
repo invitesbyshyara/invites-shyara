@@ -3,8 +3,9 @@ import { motion } from 'framer-motion';
 import { TemplateConfig } from '@/types';
 import InviteCover from '@/components/InviteCover';
 import InviteRsvpForm from '@/components/InviteRsvpForm';
+import { getLiveInviteCopy } from '@/utils/liveInviteCopy';
 
-interface Props { config: TemplateConfig; data: Record<string, any>; isPreview?: boolean; inviteId?: string; }
+interface Props { config: TemplateConfig; data: Record<string, any>; isPreview?: boolean; inviteId?: string; language?: string; }
 
 const c = {
   bg: 'hsl(30,25%,90%)', bgAlt: 'hsl(25,22%,86%)', bgCard: 'hsl(30,20%,94%)',
@@ -25,13 +26,14 @@ const RusticDivider = () => (
   </div>
 );
 
-const RusticCharm = ({ config, data, isPreview = false, inviteId }: Props) => {
+const RusticCharm = ({ config, data, isPreview = false, inviteId, language }: Props) => {
   const [isOpened, setIsOpened] = useState(false);
   const title = `${data.brideName || 'Bride'} & ${data.groomName || 'Groom'}`;
+  const copy = getLiveInviteCopy(language);
 
   return (
     <>
-      <InviteCover title={title} subtitle="A Countryside Celebration" date={data.weddingDate || ''} time={data.weddingTime || ''} slug={data.slug || 'preview'} isPreview={isPreview} theme="rustic-warm" onOpen={() => setIsOpened(true)} />
+      <InviteCover title={title} subtitle={copy.countrysideCelebration} date={data.weddingDate || ''} time={data.weddingTime || ''} slug={data.slug || 'preview'} isPreview={isPreview} language={language} theme="rustic-warm" onOpen={() => setIsOpened(true)} />
       {isOpened && (
         <div className="min-h-screen relative" style={{ background: c.bg }}>
           {/* Kraft paper texture overlay */}
@@ -39,11 +41,11 @@ const RusticCharm = ({ config, data, isPreview = false, inviteId }: Props) => {
 
           {config.supportedSections.includes('hero') && (
             <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} className="py-32 md:py-44 px-6 text-center z-10 relative">
-              <motion.p custom={0} variants={fadeUp} className="text-xs uppercase tracking-[0.4em] font-body mb-8" style={{ color: c.olive }}>🌿 A Rustic Celebration 🌿</motion.p>
+              <motion.p custom={0} variants={fadeUp} className="text-xs uppercase tracking-[0.4em] font-body mb-8" style={{ color: c.olive }}>🌿 {copy.rusticCelebration} 🌿</motion.p>
               <motion.h1 custom={1} variants={fadeUp} className="font-display text-5xl md:text-7xl font-bold mb-2 leading-[0.9]" style={{ color: c.heading }}>{data.brideName || 'Bride'}</motion.h1>
               <motion.p custom={2} variants={fadeUp} className="font-display text-3xl italic my-4" style={{ color: c.accent }}>&</motion.p>
               <motion.h1 custom={3} variants={fadeUp} className="font-display text-5xl md:text-7xl font-bold mb-8 leading-[0.9]" style={{ color: c.heading }}>{data.groomName || 'Groom'}</motion.h1>
-              <motion.p custom={4} variants={fadeUp} className="text-sm font-body" style={{ color: c.body }}>are tying the knot</motion.p>
+              <motion.p custom={4} variants={fadeUp} className="text-sm font-body" style={{ color: c.body }}>{copy.areTyingTheKnot}</motion.p>
               {data.weddingDate && (
                 <motion.div custom={5} variants={fadeUp} className="mt-8 inline-flex items-center gap-4 px-8 py-4 rounded-lg border-2 border-dashed" style={{ borderColor: c.border, background: c.bgCard }}>
                   <span className="font-display text-lg font-bold" style={{ color: c.accent }}>{data.weddingDate}</span>
@@ -57,7 +59,7 @@ const RusticCharm = ({ config, data, isPreview = false, inviteId }: Props) => {
             <motion.section initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-100px' }} className="py-24 px-6" style={{ background: c.bgAlt }}>
               <div className="max-w-2xl mx-auto text-center">
                 <RusticDivider />
-                <motion.h2 custom={0} variants={fadeUp} className="font-display text-3xl font-bold mt-6 mb-8" style={{ color: c.heading }}>Our Story</motion.h2>
+                <motion.h2 custom={0} variants={fadeUp} className="font-display text-3xl font-bold mt-6 mb-8" style={{ color: c.heading }}>{copy.ourStory}</motion.h2>
                 <motion.p custom={1} variants={fadeUp} className="text-lg leading-[1.9] font-body" style={{ color: c.body }}>{data.loveStory}</motion.p>
               </div>
             </motion.section>
@@ -66,7 +68,7 @@ const RusticCharm = ({ config, data, isPreview = false, inviteId }: Props) => {
           {config.supportedSections.includes('schedule') && data.schedule?.length > 0 && (
             <motion.section initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-100px' }} className="py-24 px-6 z-10 relative">
               <div className="max-w-2xl mx-auto">
-                <motion.h2 custom={0} variants={fadeUp} className="font-display text-3xl font-bold text-center mb-12" style={{ color: c.heading }}>The Plan</motion.h2>
+                <motion.h2 custom={0} variants={fadeUp} className="font-display text-3xl font-bold text-center mb-12" style={{ color: c.heading }}>{copy.thePlan}</motion.h2>
                 <div className="space-y-5">
                   {data.schedule.map((item: { time: string; title: string; description?: string }, i: number) => (
                     <motion.div key={i} custom={i + 1} variants={fadeUp} className="flex gap-5 items-start p-5 rounded-lg border-2 border-dashed" style={{ background: c.bgCard, borderColor: c.border }}>
@@ -81,7 +83,7 @@ const RusticCharm = ({ config, data, isPreview = false, inviteId }: Props) => {
 
           {config.supportedSections.includes('venue') && (data.venueName || data.venueAddress) && (
             <motion.section initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-100px' }} className="py-24 px-6 text-center" style={{ background: c.bgAlt }}>
-              <motion.h2 custom={0} variants={fadeUp} className="font-display text-3xl font-bold mb-10" style={{ color: c.heading }}>The Venue</motion.h2>
+              <motion.h2 custom={0} variants={fadeUp} className="font-display text-3xl font-bold mb-10" style={{ color: c.heading }}>{copy.theVenue}</motion.h2>
               {data.venueName && <motion.p custom={1} variants={fadeUp} className="font-display text-2xl font-medium mb-2" style={{ color: c.accent }}>{data.venueName}</motion.p>}
               {data.venueAddress && <motion.p custom={2} variants={fadeUp} className="font-body text-lg" style={{ color: c.body }}>{data.venueAddress}</motion.p>}
             </motion.section>
@@ -90,8 +92,8 @@ const RusticCharm = ({ config, data, isPreview = false, inviteId }: Props) => {
           {config.supportedSections.includes('rsvp') && inviteId && (
             <motion.section initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-100px' }} className="py-24 px-6">
               <div className="max-w-md mx-auto text-center">
-                <motion.h2 custom={0} variants={fadeUp} className="font-display text-3xl font-bold mb-4" style={{ color: c.heading }}>RSVP</motion.h2>
-                <motion.p custom={1} variants={fadeUp} className="font-body mb-8" style={{ color: c.body }}>We'd love to have you there</motion.p>
+                <motion.h2 custom={0} variants={fadeUp} className="font-display text-3xl font-bold mb-4" style={{ color: c.heading }}>{copy.rsvp}</motion.h2>
+                <motion.p custom={1} variants={fadeUp} className="font-body mb-8" style={{ color: c.body }}>{copy.wedLoveToHaveYouThere}</motion.p>
                 <motion.div custom={2} variants={fadeUp} className="p-6 rounded-lg border-2 border-dashed" style={{ background: c.bgCard, borderColor: c.border }}><InviteRsvpForm inviteId={inviteId} /></motion.div>
               </div>
             </motion.section>
@@ -100,7 +102,7 @@ const RusticCharm = ({ config, data, isPreview = false, inviteId }: Props) => {
           <footer className="py-16 text-center" style={{ borderTop: `2px dashed ${c.border}` }}>
             <RusticDivider />
             <p className="font-display text-xl mt-4" style={{ color: c.accent }}>{data.brideName} & {data.groomName}</p>
-            <p className="text-[10px] font-body tracking-[0.3em] uppercase mt-2" style={{ color: c.muted }}>Made with love on <span style={{ color: c.accent }}>Shyara</span></p>
+            <p className="text-[10px] font-body tracking-[0.3em] uppercase mt-2" style={{ color: c.muted }}>{copy.poweredBy} <span style={{ color: c.accent }}>Shyara</span></p>
           </footer>
         </div>
       )}

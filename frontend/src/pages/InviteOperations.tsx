@@ -151,6 +151,23 @@ const formatDate = (value?: string) => {
   }
 };
 
+const emptySummary = {
+  totals: {
+    invited: 0,
+    attending: 0,
+    households: 0,
+    adults: 0,
+    children: 0,
+    stayRequests: 0,
+    transportRequests: 0,
+  },
+  mealCounts: {} as Record<string, number>,
+  roomSummary: {} as Record<string, { rooms: number; guests: number }>,
+  transportSummary: {} as Record<string, number>,
+  followUpTasks: [] as string[],
+  missingInfoAlerts: [] as string[],
+};
+
 const InviteOperations = () => {
   const { inviteId = "" } = useParams<{ inviteId: string }>();
   const { isAuthenticated } = useAuth();
@@ -190,17 +207,32 @@ const InviteOperations = () => {
 
     let mounted = true;
 
-    Promise.all([api.getInviteWorkspace(inviteId), api.getInvite(inviteId)])
-      .then(([workspaceResponse, inviteResponse]) => {
+    api.getInviteWorkspace(inviteId)
+      .then(async (workspaceResponse) => {
         if (!mounted) return;
+
         setWorkspace(workspaceResponse);
-        setInvite(inviteResponse);
         setRsvpForm(workspaceResponse.rsvpSettings);
-        setLocalizationForm(workspaceResponse.localization);
+        setLocalizationForm(
+          workspaceResponse.localization ?? {
+            defaultLanguage: workspaceResponse.defaultLanguage,
+            enabledLanguages: workspaceResponse.availableLanguages,
+            translations: {},
+            translationMeta: {},
+          }
+        );
         setBroadcastForm((current) => ({
           ...current,
-          language: workspaceResponse.localization.defaultLanguage,
+          language: workspaceResponse.defaultLanguage,
         }));
+
+        if (workspaceResponse.permissions.includes("edit_content") || workspaceResponse.accessRole === "owner") {
+          const inviteResponse = await api.getInvite(inviteId);
+          if (!mounted) return;
+          setInvite(inviteResponse);
+        } else {
+          setInvite(null);
+        }
       })
       .catch(() => {
         if (!mounted) return;
@@ -220,17 +252,33 @@ const InviteOperations = () => {
     const response = await api.getInviteWorkspace(inviteId);
     setWorkspace(response);
     setRsvpForm(response.rsvpSettings);
-    setLocalizationForm(response.localization);
+    setLocalizationForm(
+      response.localization ?? {
+        defaultLanguage: response.defaultLanguage,
+        enabledLanguages: response.availableLanguages,
+        translations: {},
+        translationMeta: {},
+      }
+    );
   };
 
   const canUse = (permissions: CollaboratorPermission[]) =>
-    workspace?.permissions.some((permission) => permissions.includes(permission)) ?? false;
+    workspace?.accessRole === "owner" || (workspace?.permissions.some((permission) => permissions.includes(permission)) ?? false);
 
   const canManageGuests = canUse(["manage_rsvps", "handle_guest_support", "edit_content"]);
-  const canEditInviteSetup = canUse(["edit_content", "manage_rsvps"]);
-  const canSendBroadcasts = canUse(["send_reminders", "manage_rsvps", "edit_content"]);
+  const canEditInviteSetup = canUse(["edit_content"]);
+  const canSendBroadcasts = canUse(["send_reminders"]);
   const canManageCollaborators = workspace?.accessRole === "owner";
-  const canViewReports = canUse(["view_reports", "manage_rsvps", "handle_guest_support", "edit_content"]);
+  const canViewReports = canUse(["view_reports"]);
+  const availableGuestLanguages = localizationForm?.enabledLanguages ?? workspace?.availableLanguages ?? [];
+  const defaultGuestLanguage = localizationForm?.defaultLanguage ?? workspace?.defaultLanguage ?? "en";
+  const availableMealOptions = useMemo(() => {
+    const options = rsvpForm?.mealOptions ?? [];
+    if (guestForm.mealChoice && !options.includes(guestForm.mealChoice)) {
+      return [...options, guestForm.mealChoice];
+    }
+    return options;
+  }, [guestForm.mealChoice, rsvpForm?.mealOptions]);
 
   const segments = useMemo(() => {
     const values = new Set(["general", "family", "vip", "vendors"]);
@@ -293,6 +341,16 @@ const InviteOperations = () => {
 
   const headline = invite ? getInviteHeadline(invite) : workspace?.invite.slug ?? "Operations";
 
+  const pendingAccessRequests = useMemo(
+    () => workspace?.accessRequests.filter((request) => request.status === "pending") ?? [],
+    [workspace?.accessRequests]
+  );
+
+  const getRequestStatus = (permissions: CollaboratorPermission[]) =>
+    workspace?.myAccessRequests.find((request) =>
+      request.status === "pending" && permissions.every((permission) => request.requestedPermissions.includes(permission))
+    );
+
   const copyText = async (value: string, title: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -318,7 +376,7 @@ const InviteOperations = () => {
     });
   };
 
-  const updateGuestForm = <K extends keyof InviteGuest | keyof ReturnType<typeof emptyGuest>>(key: K, value: unknown) => {
+  const updateGuestForm = <K extends keyof InviteGuest | keyof ReturnType<typeof emptyGuest>,>(key: K, value: unknown) => {
     setGuestForm((current) => ({ ...current, [key]: value }));
   };
 
@@ -364,10 +422,11 @@ const InviteOperations = () => {
         household: guestForm.household?.trim() || undefined,
         audienceSegment: guestForm.audienceSegment?.trim() || "general",
         tags: (guestForm.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
-        language: guestForm.language || localizationForm?.defaultLanguage || "en",
+        language: guestForm.language || defaultGuestLanguage,
         guestCount: Number(guestForm.guestCount ?? 1) || 1,
         adultCount: Number(guestForm.adultCount ?? 0) || 0,
         childCount: Number(guestForm.childCount ?? 0) || 0,
+        mealChoice: guestForm.mealChoice?.trim() || undefined,
         roomCount: Number(guestForm.roomCount ?? 0) || 0,
       };
 
@@ -405,7 +464,7 @@ const InviteOperations = () => {
     try {
       await api.updateInviteRsvpSettings(inviteId, {
         ...rsvpForm,
-        maxGuestCount: Math.max(1, Math.min(12, Number(rsvpForm.maxGuestCount) || 1)),
+        maxGuestCount: rsvpForm.maxGuestCount ? Math.max(1, Math.min(9999, Number(rsvpForm.maxGuestCount) || 1)) : undefined,
         mealOptions: rsvpForm.mealOptions.map((item) => item.trim()).filter(Boolean).slice(0, 8),
         customQuestions: rsvpForm.customQuestions.slice(0, 6),
       });
@@ -419,12 +478,11 @@ const InviteOperations = () => {
   };
 
   const saveLanguages = async () => {
-    if (!rsvpForm || !localizationForm) return;
+    if (!localizationForm) return;
 
     setSavingLanguageSetup(true);
     try {
       await api.updateInviteLocalization(inviteId, localizationForm);
-      await api.updateInviteRsvpSettings(inviteId, rsvpForm);
       await refreshWorkspace();
       toast({ title: "Language setup updated" });
     } catch {
@@ -498,6 +556,76 @@ const InviteOperations = () => {
     } catch {
       toast({ title: "Could not remove collaborator", variant: "destructive" });
     }
+  };
+
+  const requestAccess = async (permissions: CollaboratorPermission[]) => {
+    const allowedPermissions = permissions.filter((permission) => workspace?.requestablePermissions.includes(permission));
+    if (allowedPermissions.length === 0) {
+      toast({ title: "No additional permissions are available to request", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await api.requestInviteAccess(inviteId, allowedPermissions);
+      await refreshWorkspace();
+      toast({ title: "Access request sent" });
+    } catch {
+      toast({ title: "Could not submit access request", variant: "destructive" });
+    }
+  };
+
+  const approveAccessRequest = async (accessRequestId: string) => {
+    try {
+      await api.approveInviteAccessRequest(inviteId, accessRequestId);
+      await refreshWorkspace();
+      toast({ title: "Access request approved" });
+    } catch {
+      toast({ title: "Could not approve access request", variant: "destructive" });
+    }
+  };
+
+  const rejectAccessRequest = async (accessRequestId: string) => {
+    try {
+      await api.rejectInviteAccessRequest(inviteId, accessRequestId);
+      await refreshWorkspace();
+      toast({ title: "Access request rejected" });
+    } catch {
+      toast({ title: "Could not reject access request", variant: "destructive" });
+    }
+  };
+
+  const renderLockedState = (
+    title: string,
+    description: string,
+    requestedPermissions: CollaboratorPermission[]
+  ) => {
+    const pendingRequest = getRequestStatus(requestedPermissions);
+
+    return (
+      <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+        <div>
+          <h2 className="font-display text-2xl font-semibold">{title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {requestedPermissions.map((permission) => (
+            <Badge key={permission} variant="outline">{permission.replace(/_/g, " ")}</Badge>
+          ))}
+        </div>
+        {pendingRequest ? (
+          <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+            Access request pending since {formatDate(pendingRequest.requestedAt)}.
+          </div>
+        ) : (
+          <Button
+            disabled={!workspace?.requestablePermissions.some((permission) => requestedPermissions.includes(permission))}
+            onClick={() => requestAccess(requestedPermissions)}
+          >
+            Request access from Admin
+          </Button>
+        )}
+      </div>
+    );
   };
 
   const loadExportPack = async () => {
@@ -578,6 +706,8 @@ const InviteOperations = () => {
     );
   }
 
+  const summary = workspace.summary ?? emptySummary;
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="sticky top-0 z-40 border-b border-border bg-card/85 backdrop-blur-sm">
@@ -607,22 +737,22 @@ const InviteOperations = () => {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-2xl border border-border bg-card p-5">
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Invited</p>
-            <p className="mt-2 text-3xl font-display font-bold">{workspace.summary.totals.invited}</p>
+            <p className="mt-2 text-3xl font-display font-bold">{summary.totals.invited}</p>
             <p className="mt-2 text-xs text-muted-foreground">Total guest records in this workspace.</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-5">
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Attending</p>
-            <p className="mt-2 text-3xl font-display font-bold">{workspace.summary.totals.attending}</p>
+            <p className="mt-2 text-3xl font-display font-bold">{summary.totals.attending}</p>
             <p className="mt-2 text-xs text-muted-foreground">Combined confirmed headcount.</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-5">
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Households</p>
-            <p className="mt-2 text-3xl font-display font-bold">{workspace.summary.totals.households}</p>
+            <p className="mt-2 text-3xl font-display font-bold">{summary.totals.households}</p>
             <p className="mt-2 text-xs text-muted-foreground">Useful for rooming and check-in planning.</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-5">
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Stay Requests</p>
-            <p className="mt-2 text-3xl font-display font-bold">{workspace.summary.totals.stayRequests}</p>
+            <p className="mt-2 text-3xl font-display font-bold">{summary.totals.stayRequests}</p>
             <p className="mt-2 text-xs text-muted-foreground">Guests currently needing accommodation.</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-5">
@@ -634,18 +764,22 @@ const InviteOperations = () => {
 
         {/* Quick-action strip */}
         <div className="flex flex-wrap gap-3">
-          <Button asChild variant="outline" size="sm">
-            <Link to={`/dashboard/invites/${inviteId}/rsvps`}>
-              <ListChecks className="w-4 h-4 mr-2" />
-              View Responses
-            </Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to={`/dashboard/invites/${inviteId}/edit`}>
-              <Pencil className="w-4 h-4 mr-2" />
-              Edit Invite Content
-            </Link>
-          </Button>
+          {(canManageGuests || canViewReports || canEditInviteSetup) && (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/dashboard/invites/${inviteId}/rsvps`}>
+                <ListChecks className="w-4 h-4 mr-2" />
+                View Responses
+              </Link>
+            </Button>
+          )}
+          {canEditInviteSetup && (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/dashboard/invites/${inviteId}/edit`}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit Invite Content
+              </Link>
+            </Button>
+          )}
           {workspace.invite.slug && (
             <Button asChild variant="outline" size="sm">
               <Link to={`/i/${workspace.invite.slug}`} target="_blank">
@@ -716,15 +850,19 @@ const InviteOperations = () => {
 
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label>Max guest count</Label>
+                  <Label>Optional max guest count</Label>
                   <Input
                     type="number"
                     min={1}
-                    max={12}
+                    max={9999}
                     disabled={!canEditInviteSetup}
-                    value={rsvpForm.maxGuestCount}
+                    placeholder="Leave blank for unlimited"
+                    value={rsvpForm.maxGuestCount ?? ""}
                     onChange={(event) =>
-                      setRsvpForm((current) => current ? { ...current, maxGuestCount: Number(event.target.value) || 1 } : current)
+                      setRsvpForm((current) => current ? {
+                        ...current,
+                        maxGuestCount: event.target.value ? Number(event.target.value) || undefined : undefined,
+                      } : current)
                     }
                   />
                 </div>
@@ -892,7 +1030,8 @@ const InviteOperations = () => {
 
             <section>
               <h2 className="font-display text-xl font-semibold mb-4">Guest List</h2>
-            <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+            {canManageGuests ? (
+              <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
               <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -933,11 +1072,11 @@ const InviteOperations = () => {
                   <div className="space-y-2">
                     <Label>Language</Label>
                     <select
-                      value={guestForm.language ?? localizationForm.defaultLanguage}
+                      value={guestForm.language ?? defaultGuestLanguage}
                       onChange={(event) => updateGuestForm("language", event.target.value)}
                       className="w-full rounded-md border border-border bg-background px-3 py-2"
                     >
-                      {localizationForm.enabledLanguages.map((language) => (
+                      {availableGuestLanguages.map((language) => (
                         <option key={language} value={language}>
                           {availableLanguages.find((item) => item.code === language)?.label ?? language}
                         </option>
@@ -975,7 +1114,7 @@ const InviteOperations = () => {
                     <Input
                       type="number"
                       min={1}
-                      max={12}
+                      max={9999}
                       value={guestForm.guestCount ?? 1}
                       onChange={(event) => updateGuestForm("guestCount", Number(event.target.value) || 1)}
                     />
@@ -985,7 +1124,7 @@ const InviteOperations = () => {
                     <Input
                       type="number"
                       min={0}
-                      max={12}
+                      max={9999}
                       value={guestForm.adultCount ?? 0}
                       onChange={(event) => updateGuestForm("adultCount", Number(event.target.value) || 0)}
                     />
@@ -995,14 +1134,23 @@ const InviteOperations = () => {
                     <Input
                       type="number"
                       min={0}
-                      max={12}
+                      max={9999}
                       value={guestForm.childCount ?? 0}
                       onChange={(event) => updateGuestForm("childCount", Number(event.target.value) || 0)}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Meal choice</Label>
-                    <Input value={guestForm.mealChoice ?? ""} onChange={(event) => updateGuestForm("mealChoice", event.target.value)} />
+                    <select
+                      value={guestForm.mealChoice ?? ""}
+                      onChange={(event) => updateGuestForm("mealChoice", event.target.value)}
+                      className="w-full rounded-md border border-border bg-background px-3 py-2"
+                    >
+                      <option value="">Select a meal option</option>
+                      {availableMealOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-2">
                     <Label>Dietary notes</Label>
@@ -1178,7 +1326,7 @@ const InviteOperations = () => {
                                 </div>
                                 <p className="text-muted-foreground">
                                   {guest.stayNeeded
-                                    ? `${guest.hotelName || "Hotel pending"} • ${guest.roomType || "Room type pending"} • ${guest.roomCount} room(s)`
+                                    ? `${guest.hotelName || "Hotel pending"} - ${guest.roomType || "Room type pending"} - ${guest.roomCount} room(s)`
                                     : "No stay currently required"}
                                 </p>
                                 {(guest.checkInDate || guest.checkOutDate) && (
@@ -1195,7 +1343,7 @@ const InviteOperations = () => {
                                 </div>
                                 <p className="text-muted-foreground">
                                   {guest.shuttleRequired || guest.transportMode
-                                    ? `${guest.transportMode || "Transport pending"}${guest.parkingRequired ? " • Parking needed" : ""}`
+                                    ? `${guest.transportMode || "Transport pending"}${guest.parkingRequired ? " - Parking needed" : ""}`
                                     : "No transport support currently required"}
                                 </p>
                                 {guest.arrivalDetails && <p className="mt-1 text-xs text-muted-foreground">Arrival: {guest.arrivalDetails}</p>}
@@ -1237,6 +1385,13 @@ const InviteOperations = () => {
                 )}
               </div>
             </div>
+            ) : (
+              renderLockedState(
+                "Guest list access",
+                "Only collaborators with RSVP or guest support access can view and update guest records.",
+                ["manage_rsvps"]
+              )
+            )}
             </section>
           </TabsContent>
 
@@ -1248,6 +1403,11 @@ const InviteOperations = () => {
                 Send targeted updates to your guests by group, response, or language. A full history of every update you've sent is shown on the right.
               </p>
             </div>
+            {!canSendBroadcasts ? renderLockedState(
+              "Guest updates",
+              "Only collaborators with reminder access can send operational broadcasts and review broadcast history.",
+              ["send_reminders"]
+            ) : (
             <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
               <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
                 <div className="flex items-start gap-3">
@@ -1290,7 +1450,7 @@ const InviteOperations = () => {
                     onChange={(event) => setBroadcastForm((current) => ({ ...current, language: event.target.value }))}
                     className="w-full rounded-md border border-border bg-background px-3 py-2"
                   >
-                    {localizationForm.enabledLanguages.map((language) => (
+                    {availableGuestLanguages.map((language) => (
                       <option key={language} value={language}>
                         {availableLanguages.find((item) => item.code === language)?.label ?? language}
                       </option>
@@ -1357,7 +1517,7 @@ const InviteOperations = () => {
                   <div className="space-y-2">
                     <Label>Languages</Label>
                     <div className="flex flex-wrap gap-2">
-                      {localizationForm.enabledLanguages.map((language) => {
+                      {availableGuestLanguages.map((language) => {
                         const active = broadcastForm.audience.languages?.includes(language) ?? false;
                         const label = availableLanguages.find((item) => item.code === language)?.label ?? language;
                         return (
@@ -1481,6 +1641,7 @@ const InviteOperations = () => {
                 )}
               </div>
             </div>
+            )}
           </TabsContent>
 
           <TabsContent value="workspace" className="space-y-6">
@@ -1491,6 +1652,7 @@ const InviteOperations = () => {
                 Invite a partner, planner, or assistant and control exactly what they can see and do. Only the owner can add or remove team members.
               </p>
             </div>
+            {canManageCollaborators ? (
             <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
               <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
                 <div className="flex items-start gap-3">
@@ -1561,6 +1723,34 @@ const InviteOperations = () => {
                   <Badge variant="outline">{workspace.collaborators.length + 1} total</Badge>
                 </div>
 
+                {pendingAccessRequests.length > 0 && (
+                  <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="font-medium text-foreground">Pending access requests</p>
+                      <Badge variant="secondary">{pendingAccessRequests.length} pending</Badge>
+                    </div>
+                    {pendingAccessRequests.map((request) => (
+                      <div key={request.id} className="rounded-lg border border-border bg-background p-4">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className="font-medium text-foreground">{request.requesterCollaborator?.name || request.requester?.name || request.requesterCollaborator?.email}</p>
+                            <p className="text-sm text-muted-foreground">{request.requesterCollaborator?.email || request.requester?.email}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {request.requestedPermissions.map((permission) => (
+                                <Badge key={permission} variant="outline">{permission.replace(/_/g, " ")}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={() => approveAccessRequest(request.id)}>Approve</Button>
+                            <Button variant="outline" size="sm" onClick={() => rejectAccessRequest(request.id)}>Reject</Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="rounded-xl border border-border p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Users className="h-4 w-4 text-primary" />
@@ -1591,7 +1781,7 @@ const InviteOperations = () => {
                             </div>
                             <p className="mt-1 text-sm text-muted-foreground">{collaborator.email}</p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Invited {formatDate(collaborator.invitedAt)}{collaborator.joinedAt ? ` • Joined ${formatDate(collaborator.joinedAt)}` : ""}
+                              Invited {formatDate(collaborator.invitedAt)}{collaborator.joinedAt ? ` - Joined ${formatDate(collaborator.joinedAt)}` : ""}
                             </p>
                             <div className="mt-3 flex flex-wrap gap-2">
                               {collaborator.permissions.map((permission) => (
@@ -1609,6 +1799,86 @@ const InviteOperations = () => {
                 )}
               </div>
             </div>
+            ) : (
+              <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+                <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+                  <h2 className="font-display text-2xl font-semibold">Your current access</h2>
+                  <p className="text-sm text-muted-foreground">
+                    You can only see the parts of this workspace that match your assigned permissions. Request extra access from the buyer when needed.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {workspace.permissions.length === 0 ? (
+                      <Badge variant="outline">No workspace permissions</Badge>
+                    ) : (
+                      workspace.permissions.map((permission) => (
+                        <Badge key={permission} variant="outline">{permission.replace(/_/g, " ")}</Badge>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="font-display text-2xl font-semibold">Request more access</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Select exactly what you need. The buyer will see the request in this workspace and can approve or reject it.
+                      </p>
+                    </div>
+                    <Badge variant="outline">{workspace.requestablePermissions.length} requestable</Badge>
+                  </div>
+
+                  <div className="space-y-3">
+                    {collaboratorPermissions.map((permission) => {
+                      const hasPermission = workspace.permissions.includes(permission.key);
+                      const pendingRequest = getRequestStatus([permission.key]);
+                      const isRequestable = workspace.requestablePermissions.includes(permission.key);
+
+                      return (
+                        <div key={permission.key} className="rounded-xl border border-border p-4">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                              <p className="font-medium text-foreground">{permission.label}</p>
+                              <p className="mt-1 text-sm text-muted-foreground">{permission.description}</p>
+                            </div>
+                            {hasPermission ? (
+                              <Badge variant="secondary">Granted</Badge>
+                            ) : pendingRequest ? (
+                              <Badge variant="outline">Pending</Badge>
+                            ) : (
+                              <Button size="sm" disabled={!isRequestable} onClick={() => requestAccess([permission.key])}>
+                                Request access
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {workspace.myAccessRequests.length > 0 && (
+                    <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                      <p className="font-medium text-foreground">Your request history</p>
+                      {workspace.myAccessRequests.map((request) => (
+                        <div key={request.id} className="rounded-lg border border-border bg-background p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={request.status === "approved" ? "secondary" : request.status === "rejected" ? "destructive" : "outline"}>
+                              {request.status}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">Requested {formatDate(request.requestedAt)}</span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {request.requestedPermissions.map((permission) => (
+                              <Badge key={permission} variant="outline">{permission.replace(/_/g, " ")}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </TabsContent>
           <TabsContent value="languages" className="space-y-6">
             {/* Orientation banner */}
@@ -1618,6 +1888,11 @@ const InviteOperations = () => {
                 Enable and translate your invite for multi-language audiences. Guests can switch languages directly from the live invite page.
               </p>
             </div>
+            {!canEditInviteSetup ? renderLockedState(
+              "Multilingual guest experience",
+              "Only collaborators with content access can change invite languages and translation settings.",
+              ["edit_content"]
+            ) : (
             <div className="rounded-2xl border border-border bg-card p-6 space-y-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-start gap-3">
@@ -1784,6 +2059,7 @@ const InviteOperations = () => {
                 </div>
               </div>
             </div>
+            )}
           </TabsContent>
 
           <TabsContent value="ops" className="space-y-6">
@@ -1794,22 +2070,28 @@ const InviteOperations = () => {
                 Download your guest list, logistics data, and event summaries. Share these files with caterers, venue teams, and coordinators.
               </p>
             </div>
+            {!canViewReports ? renderLockedState(
+              "Export and reports",
+              "Only collaborators with reporting access can view operational summaries and export packs.",
+              ["view_reports"]
+            ) : (
+            <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-border bg-card p-5">
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Adults</p>
-                <p className="mt-2 text-3xl font-display font-bold">{workspace.summary.totals.adults}</p>
+                <p className="mt-2 text-3xl font-display font-bold">{summary.totals.adults}</p>
               </div>
               <div className="rounded-2xl border border-border bg-card p-5">
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Children</p>
-                <p className="mt-2 text-3xl font-display font-bold">{workspace.summary.totals.children}</p>
+                <p className="mt-2 text-3xl font-display font-bold">{summary.totals.children}</p>
               </div>
               <div className="rounded-2xl border border-border bg-card p-5">
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Transport Requests</p>
-                <p className="mt-2 text-3xl font-display font-bold">{workspace.summary.totals.transportRequests}</p>
+                <p className="mt-2 text-3xl font-display font-bold">{summary.totals.transportRequests}</p>
               </div>
               <div className="rounded-2xl border border-border bg-card p-5">
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Missing Alerts</p>
-                <p className="mt-2 text-3xl font-display font-bold">{workspace.summary.missingInfoAlerts.length}</p>
+                <p className="mt-2 text-3xl font-display font-bold">{summary.missingInfoAlerts.length}</p>
               </div>
             </div>
 
@@ -1821,10 +2103,10 @@ const InviteOperations = () => {
                   <div className="rounded-xl bg-muted/40 p-4">
                     <p className="text-sm font-medium text-foreground">Final meal counts</p>
                     <div className="mt-3 grid gap-2">
-                      {Object.keys(workspace.summary.mealCounts).length === 0 ? (
+                      {Object.keys(summary.mealCounts).length === 0 ? (
                         <p className="text-sm text-muted-foreground">No meal data yet.</p>
                       ) : (
-                        Object.entries(workspace.summary.mealCounts).map(([label, count]) => (
+                        Object.entries(summary.mealCounts).map(([label, count]) => (
                           <div key={label} className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">{label}</span>
                             <span className="font-medium text-foreground">{count}</span>
@@ -1837,10 +2119,10 @@ const InviteOperations = () => {
                   <div className="rounded-xl bg-muted/40 p-4">
                     <p className="text-sm font-medium text-foreground">Room requirement summary</p>
                     <div className="mt-3 grid gap-2">
-                      {Object.keys(workspace.summary.roomSummary).length === 0 ? (
+                      {Object.keys(summary.roomSummary).length === 0 ? (
                         <p className="text-sm text-muted-foreground">No room requests yet.</p>
                       ) : (
-                        Object.entries(workspace.summary.roomSummary).map(([label, entry]) => (
+                        Object.entries(summary.roomSummary).map(([label, entry]) => (
                           <div key={label} className="flex items-center justify-between gap-3 text-sm">
                             <span className="text-muted-foreground">{label}</span>
                             <span className="font-medium text-foreground">{entry.rooms} room(s) / {entry.guests} guest(s)</span>
@@ -1853,10 +2135,10 @@ const InviteOperations = () => {
                   <div className="rounded-xl bg-muted/40 p-4">
                     <p className="text-sm font-medium text-foreground">Transport demand summary</p>
                     <div className="mt-3 grid gap-2">
-                      {Object.keys(workspace.summary.transportSummary).length === 0 ? (
+                      {Object.keys(summary.transportSummary).length === 0 ? (
                         <p className="text-sm text-muted-foreground">No transport demand yet.</p>
                       ) : (
-                        Object.entries(workspace.summary.transportSummary).map(([label, count]) => (
+                        Object.entries(summary.transportSummary).map(([label, count]) => (
                           <div key={label} className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">{label}</span>
                             <span className="font-medium text-foreground">{count}</span>
@@ -1874,10 +2156,10 @@ const InviteOperations = () => {
                 <div className="rounded-xl bg-muted/40 p-4">
                   <p className="text-sm font-medium text-foreground">Recommended next tasks</p>
                   <div className="mt-3 space-y-2">
-                    {workspace.summary.followUpTasks.length === 0 ? (
+                    {summary.followUpTasks.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No urgent follow-ups right now.</p>
                     ) : (
-                      workspace.summary.followUpTasks.map((task) => (
+                      summary.followUpTasks.map((task) => (
                         <p key={task} className="rounded-lg bg-background p-3 text-sm text-foreground">{task}</p>
                       ))
                     )}
@@ -1887,10 +2169,10 @@ const InviteOperations = () => {
                 <div className="rounded-xl bg-muted/40 p-4">
                   <p className="text-sm font-medium text-foreground">Missing information alerts</p>
                   <div className="mt-3 space-y-2">
-                    {workspace.summary.missingInfoAlerts.length === 0 ? (
+                    {summary.missingInfoAlerts.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No missing information alerts.</p>
                     ) : (
-                      workspace.summary.missingInfoAlerts.map((alert, index) => (
+                      summary.missingInfoAlerts.map((alert, index) => (
                         <p key={`${alert}-${index}`} className="rounded-lg bg-background p-3 text-sm text-foreground">{alert}</p>
                       ))
                     )}
@@ -1939,6 +2221,8 @@ const InviteOperations = () => {
                 </div>
               </div>
             </div>
+            </>
+            )}
           </TabsContent>
         </Tabs>
       </div>

@@ -6,7 +6,17 @@ import { verifyToken } from "../middleware/auth";
 import { upload } from "../middleware/upload";
 import { validate } from "../middleware/validate";
 import { sendInvitePublishedEmail } from "../services/email";
-import { collaboratorHasAnyPermission, getInviteAccess } from "../services/inviteOps";
+import {
+  collaboratorHasAnyPermission,
+  COLLABORATOR_PERMISSIONS,
+  getInviteAccess,
+  normalizeInviteDataForPersistence,
+} from "../services/inviteOps";
+import {
+  markInviteDataTranslationsStale,
+  refreshInviteTranslations,
+  scheduleInviteTranslationRefresh,
+} from "../services/inviteTranslation";
 import { validateSlugFormat, isInviteSlugAvailable } from "../services/slug";
 import { uploadBufferToCloudinary } from "../services/storage";
 import { env } from "../lib/env";
@@ -15,6 +25,11 @@ import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 const router = Router();
 
 const statusSchema = z.enum(["draft", "published", "expired"]);
+
+const asDataRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 
 const requireInviteAccess = async (
   userId: string,
@@ -64,6 +79,7 @@ router.get(
           },
           select: {
             roleLabel: true,
+            permissions: true,
           },
         },
       },
@@ -74,6 +90,7 @@ router.get(
       ...invite,
       rsvpCount: invite._count.rsvps,
       accessRole: invite.userId === userId ? "owner" : invite.collaborators[0]?.roleLabel ?? "collaborator",
+      permissions: invite.userId === userId ? [...COLLABORATOR_PERMISSIONS] : invite.collaborators[0]?.permissions ?? [],
     }));
 
     return sendSuccess(res, enriched);
@@ -123,13 +140,16 @@ router.post(
       }
     }
 
+    const normalizedData = asDataRecord(normalizeInviteDataForPersistence(data));
+    const dataWithTranslationState = markInviteDataTranslationsStale(normalizedData) as Prisma.InputJsonValue;
+
     const invite = await prisma.invite.create({
       data: {
         userId: user.id,
         templateSlug,
         templateCategory: template.category,
         slug,
-        data,
+        data: dataWithTranslationState,
       },
       include: {
         _count: {
@@ -137,6 +157,8 @@ router.post(
         },
       },
     });
+
+    scheduleInviteTranslationRefresh(invite.id);
 
     return sendSuccess(
       res,
@@ -192,7 +214,7 @@ router.get(
   verifyToken,
   validate({ params: z.object({ id: z.string().min(1) }) }),
   asyncHandler(async (req, res) => {
-    const access = await requireInviteAccess(req.user!.id, req.params.id);
+    const access = await requireInviteAccess(req.user!.id, req.params.id, ["edit_content"]);
 
     const invite = await prisma.invite.findFirst({
       where: { id: access.invite.id },
@@ -210,6 +232,8 @@ router.get(
     return sendSuccess(res, {
       ...invite,
       rsvpCount: invite._count.rsvps,
+      accessRole: access.isOwner ? "owner" : access.collaborator?.roleLabel ?? "collaborator",
+      permissions: access.isOwner ? [...COLLABORATOR_PERMISSIONS] : access.collaborator?.permissions ?? [],
     });
   }),
 );
@@ -276,11 +300,18 @@ router.put(
       }
     }
 
+    const normalizedData = data !== undefined
+      ? asDataRecord(normalizeInviteDataForPersistence(asDataRecord(data)))
+      : undefined;
+    const dataWithTranslationState = normalizedData
+      ? (markInviteDataTranslationsStale(normalizedData) as Prisma.InputJsonValue)
+      : undefined;
+
     const updated = await prisma.invite.update({
       where: { id },
       data: {
         ...(slug !== undefined ? { slug } : {}),
-        ...(data !== undefined ? { data } : {}),
+        ...(dataWithTranslationState !== undefined ? { data: dataWithTranslationState } : {}),
         ...(status !== undefined ? { status: status as InviteStatus } : {}),
       },
       include: {
@@ -299,11 +330,17 @@ router.put(
       if (owner?.email) {
         await sendInvitePublishedEmail(owner.email, inviteUrl);
       }
+
+      await refreshInviteTranslations(updated.id);
+    } else if (dataWithTranslationState !== undefined) {
+      scheduleInviteTranslationRefresh(updated.id);
     }
 
     return sendSuccess(res, {
       ...updated,
       rsvpCount: updated._count.rsvps,
+      accessRole: access.isOwner ? "owner" : access.collaborator?.roleLabel ?? "collaborator",
+      permissions: access.isOwner ? [...COLLABORATOR_PERMISSIONS] : access.collaborator?.permissions ?? [],
     });
   }),
 );

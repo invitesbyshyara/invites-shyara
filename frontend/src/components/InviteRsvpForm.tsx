@@ -187,6 +187,12 @@ const formCopy = {
 const getQuestionLabel = (question: CustomRsvpQuestion, language: string) =>
   question.translations?.[language] || question.label;
 
+const normalizeGuestCount = (value: number | undefined, maxGuestCount?: number) => {
+  const parsed = Number(value);
+  const safeValue = Number.isFinite(parsed) ? Math.max(1, Math.trunc(parsed)) : 1;
+  return maxGuestCount !== undefined ? Math.min(safeValue, maxGuestCount) : safeValue;
+};
+
 const InviteRsvpForm = ({ inviteId, accentColor, className = "" }: InviteRsvpFormProps) => {
   const [searchParams] = useSearchParams();
   const guestToken = searchParams.get("guest") || undefined;
@@ -237,7 +243,7 @@ const InviteRsvpForm = ({ inviteId, accentColor, className = "" }: InviteRsvpFor
             phone: cfg.viewer?.phone || "",
             household: cfg.viewer?.household || "",
             response: cfg.viewer?.response || "yes",
-            guestCount: Math.min(cfg.viewer?.guestCount || 1, cfg.maxGuestCount || 1),
+            guestCount: normalizeGuestCount(cfg.viewer?.guestCount || 1, cfg.maxGuestCount),
             adultCount: cfg.viewer?.adultCount || 0,
             childCount: cfg.viewer?.childCount || 0,
             message: "",
@@ -254,7 +260,7 @@ const InviteRsvpForm = ({ inviteId, accentColor, className = "" }: InviteRsvpFor
         } else {
           setForm((current) => ({
             ...current,
-            guestCount: Math.min(current.guestCount || 1, cfg.maxGuestCount || 1),
+            guestCount: normalizeGuestCount(current.guestCount || 1, cfg.maxGuestCount),
           }));
         }
       })
@@ -280,8 +286,8 @@ const InviteRsvpForm = ({ inviteId, accentColor, className = "" }: InviteRsvpFor
   const showStayFields = form.response === "yes" && Boolean(config?.collectStayNeeds);
   const showTravelFields = form.response === "yes" && Boolean(config?.collectTravelPlans);
   const effectiveGuestCount = config?.allowPlusOnes === false
-    ? Math.min(config.viewer?.guestCount || 1, config.maxGuestCount || 1)
-    : Math.max(1, Math.min(form.guestCount, config?.maxGuestCount || 1));
+    ? normalizeGuestCount(config.viewer?.guestCount || 1, config?.maxGuestCount)
+    : normalizeGuestCount(form.guestCount, config?.maxGuestCount);
 
   const canSubmit = useMemo(() => {
     if (!form.name.trim()) return false;
@@ -464,7 +470,7 @@ const InviteRsvpForm = ({ inviteId, accentColor, className = "" }: InviteRsvpFor
                 min={1}
                 max={config.maxGuestCount}
                 value={effectiveGuestCount}
-                onChange={(event) => updateForm("guestCount", Number(event.target.value) || 1)}
+                onChange={(event) => updateForm("guestCount", normalizeGuestCount(Number(event.target.value) || 1, config.maxGuestCount))}
                 className={inputCls}
               />
             </div>

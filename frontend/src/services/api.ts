@@ -1,7 +1,9 @@
 import {
   BroadcastAudience,
+  CollaboratorPermission,
   EventCategory,
   Invite,
+  InviteAccessRequest,
   InviteBroadcast,
   InviteCollaborator,
   InviteGuest,
@@ -214,6 +216,7 @@ const mapInvite = (raw: {
   updatedAt: string;
   rsvpCount?: number;
   accessRole?: string;
+  permissions?: Invite["permissions"];
 }) => ({
   id: raw.id,
   userId: raw.userId,
@@ -227,6 +230,7 @@ const mapInvite = (raw: {
   rsvpCount: raw.rsvpCount ?? 0,
   isPurchased: true,
   accessRole: raw.accessRole,
+  permissions: raw.permissions,
 });
 
 type CheckoutOrderResponse = {
@@ -297,6 +301,8 @@ export const api = {
         createdAt: string;
         updatedAt: string;
         rsvpCount: number;
+        accessRole?: string;
+        permissions?: Invite["permissions"];
       }[]
     >("/invites", {}, true);
     return invites.map(mapInvite);
@@ -314,6 +320,8 @@ export const api = {
       createdAt: string;
       updatedAt: string;
       rsvpCount: number;
+      accessRole?: string;
+      permissions?: Invite["permissions"];
     }>(`/invites/${inviteId}`, {}, true);
     return mapInvite(invite);
   },
@@ -335,6 +343,8 @@ export const api = {
       createdAt: string;
       updatedAt: string;
       rsvpCount: number;
+      accessRole?: string;
+      permissions?: Invite["permissions"];
     }>(
       "/invites",
       {
@@ -368,6 +378,8 @@ export const api = {
       createdAt: string;
       updatedAt: string;
       rsvpCount: number;
+      accessRole?: string;
+      permissions?: Invite["permissions"];
     }>(
       `/invites/${inviteId}`,
       {
@@ -501,7 +513,7 @@ export const api = {
   },
 
   updateInviteRsvpSettings: async (inviteId: string, settings: RsvpSettings) => {
-    return request<{ rsvpSettings: RsvpSettings }>(
+    return request<{ rsvpSettings: RsvpSettings; localization?: LocalizationSettings }>(
       `/invite-ops/${inviteId}/rsvp-settings`,
       {
         method: "PUT",
@@ -587,6 +599,33 @@ export const api = {
     return request<{ message: string }>(
       `/invite-ops/${inviteId}/collaborators/${collaboratorId}`,
       { method: "DELETE" },
+      true,
+    );
+  },
+
+  requestInviteAccess: async (inviteId: string, permissions: CollaboratorPermission[]) => {
+    return request<InviteAccessRequest>(
+      `/invite-ops/${inviteId}/access-requests`,
+      {
+        method: "POST",
+        body: JSON.stringify({ permissions }),
+      },
+      true,
+    );
+  },
+
+  approveInviteAccessRequest: async (inviteId: string, accessRequestId: string) => {
+    return request<InviteAccessRequest>(
+      `/invite-ops/${inviteId}/access-requests/${accessRequestId}/approve`,
+      { method: "POST" },
+      true,
+    );
+  },
+
+  rejectInviteAccessRequest: async (inviteId: string, accessRequestId: string) => {
+    return request<InviteAccessRequest>(
+      `/invite-ops/${inviteId}/access-requests/${accessRequestId}/reject`,
+      { method: "POST" },
       true,
     );
   },

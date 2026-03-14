@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { getLiveInviteCopy } from '@/utils/liveInviteCopy';
 
 interface AddToCalendarProps {
   title: string;
@@ -8,6 +9,7 @@ interface AddToCalendarProps {
   endDate?: string;
   location?: string;
   description?: string;
+  language?: string;
 }
 
 function toICSDate(iso: string): string {
@@ -72,6 +74,7 @@ function downloadICS(props: AddToCalendarProps) {
 const AddToCalendar = (props: AddToCalendarProps) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const copy = getLiveInviteCopy(props.language);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -92,7 +95,7 @@ const AddToCalendar = (props: AddToCalendarProps) => {
         aria-expanded={open}
       >
         <span>📅</span>
-        <span>Add to Calendar</span>
+        <span>{copy.addToCalendar}</span>
         <span className="text-xs opacity-60">{open ? '▲' : '▼'}</span>
       </button>
 
@@ -109,14 +112,14 @@ const AddToCalendar = (props: AddToCalendarProps) => {
             onClick={() => setOpen(false)}
             role="menuitem"
           >
-            <span>🗓️</span> Google Calendar
+            <span>🗓️</span> {copy.googleCalendar}
           </a>
           <button
             onClick={() => { downloadICS(props); setOpen(false); }}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm font-body hover:bg-muted transition-colors text-left"
             role="menuitem"
           >
-            <span>🍎</span> Apple / Outlook (.ics)
+            <span>🍎</span> {copy.appleOutlook}
           </button>
         </div>
       )}

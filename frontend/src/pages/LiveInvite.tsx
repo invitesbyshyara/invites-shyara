@@ -10,6 +10,7 @@ import RegistrySection from "@/components/RegistrySection";
 import AccommodationSection from "@/components/AccommodationSection";
 import { extractInviteNames } from "@/utils/share";
 import { getLocalizedInviteData } from "@/utils/invite";
+import { getLiveInviteCopy } from "@/utils/liveInviteCopy";
 
 const languageLabels: Record<string, string> = {
   en: "English",
@@ -23,10 +24,12 @@ const SimpleState = ({
   title,
   description,
   ctaLabel,
+  footerLabel = "Powered by",
 }: {
   title: string;
   description: string;
   ctaLabel: string;
+  footerLabel?: string;
 }) => (
   <div className="min-h-screen flex flex-col bg-background">
     <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
@@ -44,7 +47,7 @@ const SimpleState = ({
     </div>
     <div className="py-6 text-center">
       <a href="/" className="text-xs font-body text-muted-foreground/60 hover:text-muted-foreground transition-colors">
-        Powered by <span className="font-medium">Shyara</span>
+        {footerLabel} <span className="font-medium">Shyara</span>
       </a>
     </div>
   </div>
@@ -63,6 +66,7 @@ const LiveInvite = () => {
   const trackedViewRef = useRef(false);
   const guestToken = searchParams.get("guest") || undefined;
   const requestedLanguage = searchParams.get("lang") || undefined;
+  const requestedCopy = getLiveInviteCopy(requestedLanguage);
 
   useEffect(() => {
     let mounted = true;
@@ -131,16 +135,16 @@ const LiveInvite = () => {
   }
 
   if (takenDown) {
-    return <SimpleState title="This Invitation Is No Longer Available" description="The host has removed this invitation. If you believe this is a mistake, please contact the event organizer directly." ctaLabel="Visit Shyara" />;
+    return <SimpleState title={requestedCopy.invitationRemovedTitle} description={requestedCopy.invitationRemovedDescription} ctaLabel={requestedCopy.visitShyara} footerLabel={requestedCopy.poweredBy} />;
   }
 
   if (error || !inviteData) {
-    return <SimpleState title="Invitation Not Found" description="This invite link may be incorrect, unpublished, removed, or no longer available. Please contact the host if you expected to see an active invitation." ctaLabel="Visit Shyara" />;
+    return <SimpleState title={requestedCopy.invitationMissingTitle} description={requestedCopy.invitationMissingDescription} ctaLabel={requestedCopy.visitShyara} footerLabel={requestedCopy.poweredBy} />;
   }
 
   const config = getTemplateBySlug(inviteData.templateSlug);
   if (!config) {
-    return <SimpleState title="Template Unavailable" description="The invite exists, but its template is not available right now. Please contact the host for help." ctaLabel="Visit Shyara" />;
+    return <SimpleState title={requestedCopy.templateUnavailableTitle} description={requestedCopy.templateUnavailableDescription} ctaLabel={requestedCopy.visitShyara} footerLabel={requestedCopy.poweredBy} />;
   }
 
   const data = getLocalizedInviteData(inviteData.data as Record<string, unknown>, inviteData.selectedLanguage);
@@ -159,10 +163,11 @@ const LiveInvite = () => {
   const registryLinks = Array.isArray(data.registryLinks) ? (data.registryLinks as Array<{ title: string; url: string }>).filter((item) => item.title && item.url) : [];
   const accommodations = Array.isArray(data.accommodations) ? (data.accommodations as Array<{ name: string; address: string; link?: string; groupCode?: string; description?: string }>).filter((item) => item.name && item.address) : [];
   const postEventMode = data.postEventMode === true;
-  const thankYouMessage = typeof data.thankYouMessage === "string" && data.thankYouMessage ? data.thankYouMessage : "Thank you for celebrating with us!";
-  const hasMusicEnabled = data.enableMusic === true && typeof data.musicUrl === "string" && data.musicUrl.trim().length > 0;
   const selectedLanguage = inviteData.selectedLanguage || inviteData.languages?.[0] || "en";
   const showLanguageSwitcher = (inviteData.languages?.length ?? 0) > 1;
+  const copy = getLiveInviteCopy(selectedLanguage);
+  const thankYouMessage = typeof data.thankYouMessage === "string" && data.thankYouMessage ? data.thankYouMessage : copy.thankYouMessageFallback;
+  const hasMusicEnabled = data.enableMusic === true && typeof data.musicUrl === "string" && data.musicUrl.trim().length > 0;
 
   const changeLanguage = (language: string) => {
     const next = new URLSearchParams(searchParams);
@@ -177,65 +182,47 @@ const LiveInvite = () => {
 
   return (
     <>
-      {(showLanguageSwitcher || inviteData.viewer) && (
+      {showLanguageSwitcher && (
         <div className="fixed top-4 left-1/2 z-50 w-[min(92vw,720px)] -translate-x-1/2 px-4">
-          <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/90 px-4 py-3 shadow-lg backdrop-blur-md md:flex-row md:items-center md:justify-between">
-            <div className="min-w-0">
-              {inviteData.viewer ? (
-                <p className="truncate text-sm font-medium text-foreground">
-                  Viewing as {inviteData.viewer.name}
-                </p>
-              ) : (
-                <p className="text-sm font-medium text-foreground">Guest invite view</p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {showLanguageSwitcher
-                  ? "Switch language anytime. RSVP questions and guest-specific links stay in sync."
-                  : "Your guest-specific link is active."}
-              </p>
-            </div>
-            {showLanguageSwitcher && (
-              <div className="flex items-center gap-2">
-                <label htmlFor="live-language" className="text-xs text-muted-foreground">Language</label>
-                <select
-                  id="live-language"
-                  value={selectedLanguage}
-                  onChange={(event) => changeLanguage(event.target.value)}
-                  className="rounded-full border border-border bg-background px-3 py-2 text-sm"
-                >
-                  {(inviteData.languages ?? []).map((language) => (
-                    <option key={language} value={language}>
-                      {languageLabels[language] ?? language.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+          <div className="flex items-center justify-end gap-2 rounded-2xl border border-border bg-card/90 px-4 py-3 shadow-lg backdrop-blur-md">
+            <label htmlFor="live-language" className="text-xs text-muted-foreground">{copy.language}</label>
+            <select
+              id="live-language"
+              value={selectedLanguage}
+              onChange={(event) => changeLanguage(event.target.value)}
+              className="rounded-full border border-border bg-background px-3 py-2 text-sm"
+            >
+              {(inviteData.languages ?? []).map((language) => (
+                <option key={language} value={language}>
+                  {languageLabels[language] ?? language.toUpperCase()}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       )}
 
       <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-        <TemplateRenderer config={effectiveConfig} data={{ ...data, slug }} inviteId={postEventMode ? undefined : inviteData.inviteId} />
+        <TemplateRenderer config={effectiveConfig} data={{ ...data, slug }} inviteId={postEventMode ? undefined : inviteData.inviteId} language={selectedLanguage} />
       </Suspense>
 
       {videoUrl && (
         <section className="py-12 px-6 bg-background">
           <div className="max-w-2xl mx-auto">
-            <h2 className="font-display text-2xl font-bold text-center mb-6">Watch Our Story</h2>
+            <h2 className="font-display text-2xl font-bold text-center mb-6">{copy.watchOurStory}</h2>
             <VideoEmbed url={videoUrl} />
           </div>
         </section>
       )}
 
-      <RegistrySection links={registryLinks} />
-      <AccommodationSection entries={accommodations} />
+      <RegistrySection links={registryLinks} language={selectedLanguage} />
+      <AccommodationSection entries={accommodations} language={selectedLanguage} />
 
       {postEventMode && (
         <section className="py-16 px-6 bg-primary/5 border-t border-border">
           <div className="max-w-lg mx-auto text-center">
             <div className="text-4xl mb-4">💛</div>
-            <h2 className="font-display text-2xl font-bold mb-3">Thank You</h2>
+            <h2 className="font-display text-2xl font-bold mb-3">{copy.thankYou}</h2>
             <p className="font-body text-muted-foreground leading-relaxed">{thankYouMessage}</p>
           </div>
         </section>
@@ -244,9 +231,9 @@ const LiveInvite = () => {
       {((startDateISO && !postEventMode) || venueAddress) && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 flex-wrap justify-center px-4">
           {startDateISO && !postEventMode && (
-            <AddToCalendar title={eventTitle} startDate={startDateISO} location={location || undefined} description={`You're invited! View your invitation at ${window.location.href}`} />
+            <AddToCalendar title={eventTitle} startDate={startDateISO} location={location || undefined} description={`${copy.yourInvited}! ${window.location.href}`} language={selectedLanguage} />
           )}
-          {venueAddress && <DirectionsButton address={venueAddress} />}
+          {venueAddress && <DirectionsButton address={venueAddress} language={selectedLanguage} />}
         </div>
       )}
 

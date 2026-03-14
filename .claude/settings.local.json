@@ -6,7 +6,8 @@
       "Bash(npx tsx:*)",
       "Bash(npm install:*)",
       "Bash(npx prisma:*)",
-      "Bash(1:*)"
+      "Bash(1:*)",
+      "Bash(xargs grep -l \"mealOptions\")"
     ]
   }
 }

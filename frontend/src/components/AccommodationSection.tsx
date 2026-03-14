@@ -1,3 +1,5 @@
+import { getLiveInviteCopy } from '@/utils/liveInviteCopy';
+
 interface AccommodationEntry {
   name: string;
   address: string;
@@ -8,15 +10,17 @@ interface AccommodationEntry {
 
 interface AccommodationSectionProps {
   entries: AccommodationEntry[];
+  language?: string;
 }
 
-const AccommodationSection = ({ entries }: AccommodationSectionProps) => {
+const AccommodationSection = ({ entries, language }: AccommodationSectionProps) => {
   if (!entries.length) return null;
+  const copy = getLiveInviteCopy(language);
 
   return (
     <section className="py-12 px-6 bg-muted/30 border-t border-border">
       <div className="max-w-2xl mx-auto">
-        <h2 className="font-display text-2xl font-bold text-center mb-6">Accommodation</h2>
+        <h2 className="font-display text-2xl font-bold text-center mb-6">{copy.accommodation}</h2>
         <div className="space-y-4">
           {entries.map((e, i) => (
             <div key={i} className="rounded-xl border border-border bg-card p-4">
@@ -27,7 +31,7 @@ const AccommodationSection = ({ entries }: AccommodationSectionProps) => {
               )}
               {e.groupCode && (
                 <p className="text-xs text-muted-foreground font-body mt-1">
-                  Group code: <span className="font-mono font-medium">{e.groupCode}</span>
+                  {copy.groupCode}: <span className="font-mono font-medium">{e.groupCode}</span>
                 </p>
               )}
               {e.link && (
@@ -37,7 +41,7 @@ const AccommodationSection = ({ entries }: AccommodationSectionProps) => {
                   rel="noopener noreferrer"
                   className="inline-block mt-3 text-sm text-primary font-body hover:underline"
                 >
-                  Book →
+                  {copy.book} →
                 </a>
               )}
             </div>

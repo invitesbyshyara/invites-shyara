@@ -1,14 +1,18 @@
+import { getLiveInviteCopy } from '@/utils/liveInviteCopy';
+
 interface RegistrySectionProps {
   links: { title: string; url: string }[];
+  language?: string;
 }
 
-const RegistrySection = ({ links }: RegistrySectionProps) => {
+const RegistrySection = ({ links, language }: RegistrySectionProps) => {
   if (!links.length) return null;
+  const copy = getLiveInviteCopy(language);
 
   return (
     <section className="py-12 px-6 bg-background border-t border-border">
       <div className="max-w-2xl mx-auto text-center">
-        <h2 className="font-display text-2xl font-bold mb-6">Gift Registry</h2>
+        <h2 className="font-display text-2xl font-bold mb-6">{copy.giftRegistry}</h2>
         <div className="flex flex-wrap gap-3 justify-center">
           {links.map((link, i) => (
             <a

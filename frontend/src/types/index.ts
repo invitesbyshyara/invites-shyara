@@ -44,6 +44,7 @@ export interface Invite {
   rsvpCount: number;
   isPurchased: boolean;
   accessRole?: string;
+  permissions?: CollaboratorPermission[];
 }
 
 export type RsvpResponse = 'yes' | 'no' | 'maybe';
@@ -127,7 +128,7 @@ export interface CustomRsvpQuestion {
 export interface RsvpSettings {
   collectEmail: boolean;
   allowPlusOnes: boolean;
-  maxGuestCount: number;
+  maxGuestCount?: number;
   collectAdultsChildrenSplit: boolean;
   collectMealChoice: boolean;
   mealOptions: string[];
@@ -163,14 +164,14 @@ export interface InviteGuest {
   mealChoice?: string;
   dietaryRestrictions?: string;
   customAnswers?: Record<string, unknown>;
-  stayNeeded: boolean;
+  stayNeeded?: boolean;
   lodgingStatus?: string;
   hotelName?: string;
   roomType?: string;
-  roomCount: number;
+  roomCount?: number;
   checkInDate?: string;
   checkOutDate?: string;
-  shuttleRequired: boolean;
+  shuttleRequired?: boolean;
   transportMode?: string;
   arrivalDetails?: string;
   departureDetails?: string;
@@ -206,6 +207,36 @@ export interface InviteCollaborator {
   joinedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InviteAccessRequest {
+  id: string;
+  inviteId: string;
+  requesterUserId: string;
+  requesterCollaboratorId: string;
+  requestedPermissions: CollaboratorPermission[];
+  status: 'pending' | 'approved' | 'rejected';
+  requestedAt: string;
+  decidedAt?: string;
+  decidedByUserId?: string;
+  requester?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  requesterCollaborator?: {
+    id: string;
+    email: string;
+    name?: string;
+    roleLabel: string;
+    status: InviteCollaborator['status'];
+    permissions: CollaboratorPermission[];
+  };
+  decider?: {
+    id: string;
+    name: string;
+    email: string;
+  };
 }
 
 export interface BroadcastAudience {
@@ -268,6 +299,18 @@ export interface LocalizationSettings {
   defaultLanguage: string;
   enabledLanguages: string[];
   translations: Record<string, Record<string, unknown>>;
+  translationMeta: Record<
+    string,
+    {
+      status: 'up_to_date' | 'stale' | 'failed';
+      sourceHash?: string;
+      translatedAt?: string;
+      lastRequestedAt?: string;
+      lastError?: string;
+      provider?: string;
+      model?: string;
+    }
+  >;
 }
 
 export interface OperationsSummary {
@@ -294,12 +337,17 @@ export interface InviteWorkspace {
     status: InviteStatus;
     templateSlug: string;
   };
+  availableLanguages: string[];
+  defaultLanguage: string;
   rsvpSettings: RsvpSettings;
-  localization: LocalizationSettings;
-  summary: OperationsSummary;
+  localization?: LocalizationSettings;
+  summary?: OperationsSummary;
   guests: InviteGuest[];
   collaborators: InviteCollaborator[];
   broadcasts: InviteBroadcast[];
   accessRole: string;
   permissions: CollaboratorPermission[];
+  requestablePermissions: CollaboratorPermission[];
+  myAccessRequests: InviteAccessRequest[];
+  accessRequests: InviteAccessRequest[];
 }

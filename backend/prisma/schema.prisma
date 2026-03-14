@@ -29,6 +29,8 @@ model User {
   transactions  Transaction[]
   refreshTokens RefreshToken[]
   collaborations InviteCollaborator[] @relation("InviteCollaboratorUser")
+  accessRequests InviteAccessRequest[] @relation("InviteAccessRequestRequester")
+  reviewedAccessRequests InviteAccessRequest[] @relation("InviteAccessRequestDecider")
 }
 
 enum UserPlan {
@@ -125,6 +127,7 @@ model Invite {
   guests   InviteGuest[]
   broadcasts InviteBroadcast[]
   collaborators InviteCollaborator[]
+  accessRequests InviteAccessRequest[]
 
   @@index([userId])
   @@index([status])
@@ -296,6 +299,12 @@ enum CollaboratorStatus {
   revoked
 }
 
+enum AccessRequestStatus {
+  pending
+  approved
+  rejected
+}
+
 enum BroadcastType {
   venue_change
   timing_update
@@ -388,10 +397,35 @@ model InviteCollaborator {
 
   invite          Invite             @relation(fields: [inviteId], references: [id], onDelete: Cascade)
   user            User?              @relation("InviteCollaboratorUser", fields: [userId], references: [id], onDelete: SetNull)
+  accessRequests  InviteAccessRequest[]
 
   @@unique([inviteId, email])
   @@index([inviteId])
   @@index([email])
+}
+
+model InviteAccessRequest {
+  id                      String              @id @default(cuid())
+  inviteId                String
+  requesterUserId         String
+  requesterCollaboratorId String
+  requestedPermissions    String[]
+  status                  AccessRequestStatus @default(pending)
+  decidedByUserId         String?
+  requestedAt             DateTime            @default(now())
+  decidedAt               DateTime?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  invite                 Invite             @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  requester             User               @relation("InviteAccessRequestRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  requesterCollaborator InviteCollaborator @relation(fields: [requesterCollaboratorId], references: [id], onDelete: Cascade)
+  decider               User?              @relation("InviteAccessRequestDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([inviteId])
+  @@index([requesterUserId])
+  @@index([requesterCollaboratorId])
+  @@index([status])
 }
 
 model InviteBroadcast {

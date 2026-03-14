@@ -36,6 +36,9 @@ const envSchema = z.object({
 
   RESEND_API_KEY: z.string().min(1),
   EMAIL_FROM: z.string().email(),
+
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  GEMINI_TRANSLATION_MODEL: z.string().min(1).default("gemini-2.5-flash"),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -91,6 +91,11 @@ const Dashboard = () => {
   const totalRsvps = invites.reduce((sum, invite) => sum + invite.rsvpCount, 0);
   const publishedInvites = invites.filter((invite) => invite.status === "published").length;
   const drafts = invites.filter((invite) => invite.status === "draft").length;
+  const canEditInvite = (invite: Invite) => invite.accessRole === "owner" || Boolean(invite.permissions?.includes("edit_content"));
+  const canViewResponsesForInvite = (invite: Invite) =>
+    invite.accessRole === "owner" ||
+    Boolean(invite.permissions?.some((permission) => ["manage_rsvps", "handle_guest_support", "view_reports", "edit_content"].includes(permission)));
+  const canDeleteInvite = (invite: Invite) => invite.accessRole === "owner" || (!invite.accessRole && invite.userId === user?.id);
 
   const checklist = [
     { label: "Pick a template", complete: invites.length > 0 },
@@ -126,7 +131,7 @@ const Dashboard = () => {
     setTimeout(() => setCopiedSlug(null), 2000);
   };
 
-  const firstPublishedInvite = invites.find((invite) => invite.status === "published");
+  const firstPublishedInvite = invites.find((invite) => invite.status === "published" && canViewResponsesForInvite(invite));
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -345,9 +350,11 @@ const Dashboard = () => {
                                 <DropdownMenuSeparator />
                               </>
                             )}
-                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteId(invite.id)}>
-                              <Trash2 className="w-4 h-4 mr-2" /> Delete invite
-                            </DropdownMenuItem>
+                            {canDeleteInvite(invite) && (
+                              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteId(invite.id)}>
+                                <Trash2 className="w-4 h-4 mr-2" /> Delete invite
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -371,13 +378,15 @@ const Dashboard = () => {
                     {/* Action buttons — primary actions visible, secondary in dropdown */}
                     {isPublished && invite.slug ? (
                       <div className="flex gap-2">
-                        <Button asChild size="sm" className="flex-1">
-                          <Link to={`/dashboard/invites/${invite.id}/rsvps`}>View RSVPs</Link>
-                        </Button>
+                        {canViewResponsesForInvite(invite) && (
+                          <Button asChild size="sm" className="flex-1">
+                            <Link to={`/dashboard/invites/${invite.id}/rsvps`}>View RSVPs</Link>
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
-                          className="flex-1"
+                          className={canViewResponsesForInvite(invite) ? "flex-1" : "w-full"}
                           onClick={() => navigate(`/dashboard/invites/${invite.id}/operations`)}
                         >
                           Manage Event
@@ -394,13 +403,15 @@ const Dashboard = () => {
                       </div>
                     ) : (
                       <div className="flex gap-2">
-                        <Button asChild size="sm" className="flex-1">
-                          <Link to={editPath}>{isDraft ? "Edit Draft" : "Edit Invite"}</Link>
-                        </Button>
+                        {canEditInvite(invite) && (
+                          <Button asChild size="sm" className="flex-1">
+                            <Link to={editPath}>{isDraft ? "Edit Draft" : "Edit Invite"}</Link>
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
-                          className="flex-1"
+                          className={canEditInvite(invite) ? "flex-1" : "w-full"}
                           onClick={() => navigate(`/dashboard/invites/${invite.id}/operations`)}
                         >
                           Manage Event

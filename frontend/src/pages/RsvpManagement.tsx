@@ -5,19 +5,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { Invite, Rsvp } from "@/types";
+import { Invite, InviteWorkspace, Rsvp } from "@/types";
 import { getInviteHeadline } from "@/utils/invite";
 import DashboardLayout from "@/components/DashboardLayout";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 
 const RsvpManagement = () => {
   const { inviteId } = useParams<{ inviteId: string }>();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [invite, setInvite] = useState<Invite | null>(null);
+  const [workspace, setWorkspace] = useState<InviteWorkspace | null>(null);
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterResponse, setFilterResponse] = useState("all");
+  const [requestingAccess, setRequestingAccess] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -26,13 +31,44 @@ const RsvpManagement = () => {
     }
     if (!inviteId) return;
 
-    Promise.all([api.getInvite(inviteId), api.getRsvps(inviteId)])
-      .then(([inviteResult, rsvpResult]) => {
-        setInvite(inviteResult);
-        setRsvps(rsvpResult);
+    api.getInviteWorkspace(inviteId)
+      .then(async (workspaceResult) => {
+        setWorkspace(workspaceResult);
+
+        const canViewResponses = workspaceResult.accessRole === "owner" ||
+          workspaceResult.permissions.some((permission) =>
+            ["manage_rsvps", "handle_guest_support", "view_reports", "edit_content"].includes(permission)
+          );
+
+        if (canViewResponses) {
+          if (workspaceResult.accessRole === "owner" || workspaceResult.permissions.includes("edit_content")) {
+            const inviteResult = await api.getInvite(inviteId);
+            setInvite(inviteResult);
+          }
+          const rsvpResult = await api.getRsvps(inviteId);
+          setRsvps(rsvpResult);
+        }
       })
       .finally(() => setLoading(false));
   }, [inviteId, isAuthenticated, navigate]);
+
+  const requestAccess = async () => {
+    if (!inviteId) return;
+    const requestedPermissions = ["manage_rsvps", "view_reports", "handle_guest_support", "edit_content"].filter((permission) =>
+      workspace?.requestablePermissions.includes(permission as typeof workspace.requestablePermissions[number])
+    ) as Array<"manage_rsvps" | "view_reports" | "handle_guest_support" | "edit_content">;
+    setRequestingAccess(true);
+    try {
+      await api.requestInviteAccess(inviteId, requestedPermissions);
+      const refreshedWorkspace = await api.getInviteWorkspace(inviteId);
+      setWorkspace(refreshedWorkspace);
+      toast({ title: "Access request sent" });
+    } catch {
+      toast({ title: "Could not request access", variant: "destructive" });
+    } finally {
+      setRequestingAccess(false);
+    }
+  };
 
   const filtered = useMemo(() => rsvps.filter((rsvp) => {
     if (filterResponse !== "all" && rsvp.response !== filterResponse) return false;
@@ -62,7 +98,7 @@ const RsvpManagement = () => {
     URL.revokeObjectURL(url);
   };
 
-  const inviteHeadline = invite ? getInviteHeadline(invite) : "";
+  const inviteHeadline = invite ? getInviteHeadline(invite) : workspace?.invite.slug ?? "";
 
   const breadcrumbs = [
     { label: "Dashboard", href: "/dashboard" },
@@ -79,14 +115,20 @@ const RsvpManagement = () => {
     { label: "Total Guests", value: stats.totalGuests, color: "text-foreground", filter: "yes" },
   ];
 
+  const canViewResponses = workspace?.accessRole === "owner" ||
+    workspace?.permissions.some((permission) => ["manage_rsvps", "handle_guest_support", "view_reports", "edit_content"].includes(permission));
+  const pendingRequest = workspace?.myAccessRequests.find((request) =>
+    request.status === "pending" && request.requestedPermissions.includes("manage_rsvps")
+  );
+
   return (
     <DashboardLayout
       breadcrumbs={breadcrumbs}
       actions={
         <div className="flex items-center gap-2">
-          {invite?.slug && (
+          {(invite?.slug || workspace?.invite.slug) && (
             <Button asChild variant="outline" size="sm">
-              <Link to={`/i/${invite.slug}`} target="_blank">
+              <Link to={`/i/${invite?.slug || workspace?.invite.slug}`} target="_blank">
                 <ExternalLink className="w-4 h-4 mr-2" />
                 Open Live Invite
               </Link>
@@ -99,6 +141,33 @@ const RsvpManagement = () => {
         </div>
       }
     >
+      {!loading && !canViewResponses ? (
+        <div className="container py-10 px-4 max-w-3xl">
+          <div className="rounded-2xl border border-border bg-card p-8 space-y-5">
+            <div>
+              <h1 className="font-display text-3xl font-bold">RSVP access required</h1>
+              <p className="text-sm text-muted-foreground mt-2">
+                This workspace is available to you, but the RSVP list is limited to collaborators with guest-management or reporting access.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">manage rsvps</Badge>
+              <Badge variant="outline">view reports</Badge>
+              <Badge variant="outline">handle guest support</Badge>
+            </div>
+            {pendingRequest ? (
+              <p className="text-sm text-muted-foreground">Request pending since {new Date(pendingRequest.requestedAt).toLocaleDateString()}.</p>
+            ) : (
+              <Button
+                disabled={requestingAccess || !workspace?.requestablePermissions.some((permission) => ["manage_rsvps", "view_reports", "handle_guest_support", "edit_content"].includes(permission))}
+                onClick={requestAccess}
+              >
+                {requestingAccess ? "Requesting..." : "Request access from Admin"}
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (
       <div className="container py-10 px-4 max-w-5xl space-y-8">
         {/* Page heading */}
         <div>
@@ -262,6 +331,7 @@ const RsvpManagement = () => {
           </>
         )}
       </div>
+      )}
     </DashboardLayout>
   );
 };
