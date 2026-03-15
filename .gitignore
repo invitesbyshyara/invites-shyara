@@ -15,5 +15,8 @@ frontend/.vite-cache/
 frontend/dist-check*/
 frontend/dist-check/
 
+# Local worktrees
+.claude/worktrees/
+
 # OS
 Thumbs.db
