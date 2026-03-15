@@ -189,10 +189,16 @@ enum AdminRole {
   support
 }
 
+enum PackageCode {
+  package_a
+  package_b
+}
+
 model Template {
   slug             String         @id
   name             String
   category         EventCategory
+  packageCode      PackageCode    @default(package_a)
   tags             String[]
   isPremium        Boolean        @default(false)
   price            Int            @default(0)
@@ -226,12 +232,15 @@ model Invite {
   userId           String
   templateSlug     String
   templateCategory EventCategory
+  packageCode      PackageCode   @default(package_a)
+  eventManagementEnabled Boolean @default(true)
   slug             String        @unique
   status           InviteStatus  @default(draft)
   data             Json          @default("{}")
   viewCount        Int           @default(0)
   eventDate        DateTime?
   expiryDate       DateTime?
+  validUntil       DateTime
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -243,10 +252,13 @@ model Invite {
   broadcasts InviteBroadcast[]
   collaborators InviteCollaborator[]
   accessRequests InviteAccessRequest[]
+  transactions Transaction[]
 
   @@index([userId])
   @@index([status])
   @@index([templateSlug])
+  @@index([packageCode])
+  @@index([validUntil])
 }
 
 enum InviteStatus {
@@ -291,11 +303,20 @@ enum RsvpResponse {
   maybe
 }
 
+enum TransactionKind {
+  initial_purchase
+  event_management_addon
+  renewal
+}
+
 model Transaction {
   id                String            @id @default(cuid())
   userId            String
   user              User              @relation(fields: [userId], references: [id])
   templateSlug      String
+  packageCode       PackageCode       @default(package_a)
+  kind              TransactionKind   @default(initial_purchase)
+  inviteId          String?
   amount            Int
   currency          String            @default("USD")
   status            TransactionStatus @default(pending)
@@ -307,11 +328,15 @@ model Transaction {
   refundReason      String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+  invite            Invite?           @relation(fields: [inviteId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([status])
   @@index([razorpayOrderId])
   @@index([createdAt])
+  @@index([inviteId])
+  @@index([packageCode])
+  @@index([kind])
 }
 
 enum TransactionStatus {

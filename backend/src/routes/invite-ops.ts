@@ -22,6 +22,7 @@ import {
   setInviteRsvpSettings,
   TECHNICAL_GUEST_COUNT_LIMIT,
 } from "../services/inviteOps";
+import { deriveInviteEntitlements } from "../services/packageEntitlements";
 import { markInviteDataTranslationsStale, refreshInviteTranslations, scheduleInviteTranslationRefresh } from "../services/inviteTranslation";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 
@@ -40,6 +41,25 @@ const requireInviteOpsAccess = async (
 
   if (!access.isOwner && permissions && !collaboratorHasAnyPermission(access.collaborator, permissions)) {
     throw new AppError("You do not have permission for this workspace", 403);
+  }
+
+  const entitlements = deriveInviteEntitlements({
+    packageCode: access.invite.packageCode,
+    eventManagementEnabled: access.invite.eventManagementEnabled,
+    validUntil: access.invite.validUntil,
+    status: access.invite.status,
+  });
+
+  if (entitlements.isExpired) {
+    throw new AppError("Invite has expired and must be renewed before event management can continue", 410, {
+      code: "INVITE_EXPIRED",
+    });
+  }
+
+  if (!entitlements.eventManagementAccessible) {
+    throw new AppError("Event management is not enabled for this invite", 403, {
+      code: "EVENT_MANAGEMENT_LOCKED",
+    });
   }
 
   return access;

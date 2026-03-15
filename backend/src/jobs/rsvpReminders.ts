@@ -19,7 +19,11 @@ export async function runRsvpReminderJob(): Promise<void> {
   logger.info("Running RSVP deadline reminder job");
 
   const invites = await prisma.invite.findMany({
-    where: { status: "published" },
+    where: {
+      status: "published",
+      eventManagementEnabled: true,
+      validUntil: { gt: new Date() },
+    },
     include: {
       user: { select: { email: true, name: true } },
       _count: { select: { rsvps: true } },
@@ -80,7 +84,11 @@ export async function runRsvpReminderJob(): Promise<void> {
   today.setHours(0, 0, 0, 0);
 
   const pastInvites = await prisma.invite.findMany({
-    where: { status: "published" },
+    where: {
+      status: "published",
+      eventManagementEnabled: true,
+      validUntil: { gt: new Date() },
+    },
     include: { user: { select: { email: true, name: true } } },
   });
 

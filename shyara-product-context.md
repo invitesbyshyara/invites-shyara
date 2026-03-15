@@ -1,5 +1,30 @@
 # Shyara — Product Context for Marketing Strategy
 
+> **March 2026 rollout note**: the current live pricing and packaging model is no longer free-vs-premium. Use the package snapshot below and treat any older free-tier or legacy price references later in this file as historical context only.
+
+## Current Package Snapshot
+
+| Offer | Price USD | Price EUR | Positioning |
+|---|---:|---:|---|
+| Package A | 149 | 169 | Less premium design direction, all features included |
+| Package B | 99 | 119 | More premium-looking designs, invite first |
+| Package B add-on | 99 | 99 | Unlocks event-management later |
+| Renewal | 14 | 20 | Restores another 3 month validity window |
+
+### Current launch templates in this repo
+
+| Template | Package | Notes |
+|---|---|---|
+| Rustic Charm | Package A | Full-featured wedding template, less premium design direction |
+| Rustic Signature | Package B | More premium-looking wedding template, invite-first |
+
+### Current product rules
+
+- Every invite stays active for 3 months.
+- Expired invites are still visible in dashboard and admin, but public access and invite management are blocked until renewal.
+- Package B invites can show the design without RSVP/event management until the add-on is purchased.
+- Promo codes apply only to initial package purchases.
+
 ## What Is Shyara?
 
 Shyara (invite.shyara.co.in) is a digital invitation SaaS platform. Customers create a

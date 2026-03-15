@@ -112,7 +112,7 @@ const SampleInvite = () => {
             </div>
             <h1 className="font-display text-3xl font-bold mt-4">{template.name}</h1>
             <p className="text-muted-foreground font-body mt-2 max-w-2xl">
-              This sample shows the full guest-facing experience with demo details. You can browse and preview every design before purchase. Personalization unlocks after payment.
+              This sample shows the guest-facing experience with demo details. Package A includes full event tools immediately, while Package B starts with the invite and can unlock them later.
             </p>
           </div>
 
@@ -134,7 +134,7 @@ const SampleInvite = () => {
             <h2 className="font-display text-lg font-semibold mb-3">What you are seeing</h2>
             <div className="space-y-3 text-sm font-body text-muted-foreground">
               <p>This is a realistic sample invite using demo names, date, venue, and content.</p>
-              <p>After purchase, you replace every detail with your own event information and publish a private link for guests.</p>
+              <p>After purchase, you replace every detail with your own event information, publish a private link, and keep the invite active for 3 months before renewal is needed.</p>
             </div>
           </div>
 

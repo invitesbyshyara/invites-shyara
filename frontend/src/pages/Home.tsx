@@ -31,6 +31,7 @@ import { api } from "@/services/api";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { allTemplates, getTemplatesByCategory } from "@/templates/registry";
 import { TemplateConfig } from "@/types";
+import { getPackageDisplayName } from "@/lib/packageCatalog";
 
 const fadeUp = { hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } };
 const stagger = { hidden: {}, visible: { transition: { staggerChildren: 0.08 } } };
@@ -41,7 +42,7 @@ const categories = [
 
 const faqs = [
   ["Can I preview a design before I buy?", "Yes. You can browse every template, use the studio preview, and open a live sample before purchasing."],
-  ["What exactly is included after purchase?", "You get the live invite, personalization builder, custom RSVP setup, guest dashboard, reminder tools, collaboration access, and operations exports."],
+  ["What exactly is included after purchase?", "Package A includes the full feature set. Package B starts with the live invite only, then lets you unlock event management later."],
   ["Can I collect stay or travel details from guests?", "Yes. You can ask guests about accommodation and transport needs, then manage hotel, room, shuttle, and support notes from your dashboard."],
   ["Can my partner or planner help manage the invite?", "Yes. You can invite collaborators and control whether they can edit content, manage RSVPs, send reminders, view reports, or handle guest support."],
   ["Can I send reminders only to selected guests?", "Yes. Broadcasts can be sent by response status, guest segment, language, or to guests who still have not RSVP'd."],
@@ -157,10 +158,10 @@ const valuePillars = [
 ];
 
 const quickAssurances = [
-  { title: "One-time pricing", desc: "$4.00 / \u20AC5.00 for Rustic Charm. No subscription." },
+  { title: "Two packages", desc: "Package A is full-featured. Package B starts invite-only." },
   { title: "Guests need no app", desc: "Everything opens in a normal browser." },
-  { title: "Edit after publishing", desc: "Keep the same link and update details anytime." },
-  { title: "Invite + guest ops", desc: "RSVP, reminders, collaboration, and exports included." },
+  { title: "3 month validity", desc: "Renew only if you want to keep the invite active after that." },
+  { title: "Upgrade later", desc: "Package B can unlock event management whenever you need it." },
 ];
 
 const TemplateCard = ({
@@ -191,10 +192,12 @@ const TemplateCard = ({
       <div className="p-4">
         <h3 className="font-serif font-semibold">{template.name}</h3>
         <p className="mt-1 text-xs text-muted-foreground font-body">
-          Includes live invite, RSVP tools, reminder workflows, and guest operations.
+          {getPackageDisplayName(template.packageCode)} · {template.packageCode === "package_a"
+            ? "Includes the full event-management feature set."
+            : "Starts with the invite only and can unlock event tools later."}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {["RSVP", "Broadcasts", "Ops Pack"].map((tag) => (
+          {(template.packageCode === "package_a" ? ["RSVP", "Broadcasts", "Ops Pack"] : ["Premium Design", "Invite", "Add-On Ready"]).map((tag) => (
             <span key={tag} className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-medium text-secondary-foreground">
               {tag}
             </span>
@@ -281,7 +284,7 @@ const Home = () => {
               </Button>
             </motion.div>
             <motion.div variants={fadeUp} className="mt-5 flex flex-wrap justify-center gap-2 lg:justify-start">
-              {["Pay once per template", "Preview before purchase", "Personalize after payment", "No app for guests"].map((item) => (
+              {["Choose A or B", "Preview before purchase", "3 month validity", "No app for guests"].map((item) => (
                 <span key={item} className="rounded-full border border-border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur-sm">
                   {item}
                 </span>
@@ -315,7 +318,7 @@ const Home = () => {
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-5">
             {[
               { icon: Eye, title: "Compare designs", desc: "Browse templates, studio previews, and full live samples before you pay." },
-              { icon: Gift, title: "Purchase once", desc: "Pay a one-time price per template. No recurring subscription." },
+              { icon: Gift, title: "Choose your package", desc: "Package A includes all features. Package B starts invite-only and can upgrade later." },
               { icon: Palette, title: "Personalize properly", desc: "Add names, venue, photos, sections, and RSVP settings in the dashboard." },
               { icon: Smartphone, title: "Publish one link", desc: "Share the live invite anywhere and keep using the same link after edits." },
               { icon: PartyPopper, title: "Run guest ops", desc: "Track responses, send updates, manage travel or stay, and export vendor sheets." },
@@ -527,7 +530,7 @@ const Home = () => {
             </div>
             <div>
               <p className="text-3xl font-display font-bold">No recurring fees</p>
-              <p className="text-sm text-muted-foreground font-body">Unlimited edits and sharing after purchase</p>
+              <p className="text-sm text-muted-foreground font-body">3 month access window with renewal available later</p>
             </div>
           </div>
         </div>

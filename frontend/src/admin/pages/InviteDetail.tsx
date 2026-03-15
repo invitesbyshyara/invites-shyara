@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ExternalLink, Ban, RefreshCw, Pencil, Check, X, Users, MessageSquare } from 'lucide-react';
+import { getPackageDisplayName } from '@/lib/packageCatalog';
 
 const InviteDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,7 +31,7 @@ const InviteDetail: React.FC = () => {
   useEffect(() => {
     if (!id) return;
     Promise.all([adminApi.getInvite(id), adminApi.getInviteRsvps(id)])
-      .then(([inv, r]) => { setInvite(inv); setRsvps(r); setLoading(false); })
+      .then(([inv, response]) => { setInvite(inv); setRsvps(response.rsvps); setLoading(false); })
       .catch(() => { toast({ title: 'Invite not found', variant: 'destructive' }); navigate('/admin/invites'); });
   }, [id]);
 
@@ -75,6 +76,13 @@ const InviteDetail: React.FC = () => {
   const attending = rsvps.filter(r => r.response === 'yes');
   const maybe = rsvps.filter(r => r.response === 'maybe');
   const declined = rsvps.filter(r => r.response === 'no');
+  const entitlementSummary = invite.canRenew
+    ? 'Renewal needed'
+    : invite.canUpgradeEventManagement
+      ? 'Event add-on available'
+      : invite.eventManagementEnabled
+        ? 'Event tools unlocked'
+        : 'Invite only';
 
   return (
     <AdminLayout breadcrumbs={[{ label: 'Invites', to: '/admin/invites' }, { label: invite.eventName }]}>
@@ -85,6 +93,9 @@ const InviteDetail: React.FC = () => {
             <div className="flex items-center gap-2 mb-1">
               <h2 className="text-lg font-semibold text-card-foreground">{invite.eventName}</h2>
               <StatusBadge status={invite.status} />
+              <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-secondary-foreground">
+                {getPackageDisplayName(invite.packageCode)}
+              </span>
             </div>
             <p className="text-sm text-muted-foreground">Template: {invite.templateName} · Category: {invite.templateCategory}</p>
             <div className="flex items-center gap-2 mt-2">
@@ -108,6 +119,33 @@ const InviteDetail: React.FC = () => {
             <p className="text-xs text-muted-foreground mt-1">Event: {invite.eventDate} · Created: {format(new Date(invite.createdAt), 'dd MMM yyyy')} · Views: {invite.viewCount}</p>
           </div>
         </div>
+        <div className="grid gap-3 md:grid-cols-3 mt-4">
+          <div className="rounded-lg border border-border bg-background p-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Validity</p>
+            <p className="text-sm font-medium text-foreground mt-1">
+              {invite.validUntil ? format(new Date(invite.validUntil), 'dd MMM yyyy') : 'Not set'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {invite.canRenew ? 'This invite has expired and is waiting on renewal.' : 'This invite is still inside its 3 month validity window.'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-background p-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Entitlements</p>
+            <p className="text-sm font-medium text-foreground mt-1">{entitlementSummary}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {invite.eventManagementEnabled
+                ? 'RSVP, reminders, guest ops, collaborators, localization, and exports are enabled.'
+                : 'This invite is still in invite-only mode until the Package B add-on is purchased.'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-background p-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Guest responses</p>
+            <p className="text-sm font-medium text-foreground mt-1">{rsvps.length} total</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Admin can inspect historical RSVP data even when the public invite has expired.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Actions */}
@@ -116,6 +154,21 @@ const InviteDetail: React.FC = () => {
         {invite.status === 'published' && hasPermission('takedown_invite') && <Button variant="destructive" size="sm" onClick={() => setTakedownOpen(true)}><Ban className="h-4 w-4 mr-1" /> Take Down</Button>}
         {invite.status === 'taken-down' && hasPermission('takedown_invite') && <Button size="sm" onClick={handleRepublish}><RefreshCw className="h-4 w-4 mr-1" /> Re-publish</Button>}
       </div>
+
+      {(invite.canRenew || invite.canUpgradeEventManagement) && (
+        <div className={`mb-4 rounded-lg border p-4 ${invite.canRenew ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
+          <p className={`text-sm font-medium ${invite.canRenew ? 'text-red-800' : 'text-amber-800'}`}>
+            {invite.canRenew
+              ? 'This invite is currently expired.'
+              : 'This Package B invite is still invite-only.'}
+          </p>
+          <p className={`text-sm mt-1 ${invite.canRenew ? 'text-red-700' : 'text-amber-700'}`}>
+            {invite.canRenew
+              ? 'Renewal must succeed before public access, editing, RSVP, or event-management actions can resume.'
+              : 'Guests can still view the invite design, but RSVP and event-management tools stay locked until the add-on is purchased.'}
+          </p>
+        </div>
+      )}
 
       <Tabs defaultValue="rsvps">
         <TabsList>

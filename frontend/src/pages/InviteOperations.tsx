@@ -236,8 +236,17 @@ const InviteOperations = () => {
 
     let mounted = true;
 
-    api.getInviteWorkspace(inviteId)
-      .then(async (workspaceResponse) => {
+    api.getInvite(inviteId)
+      .then(async (inviteResponse) => {
+        if (!mounted) return;
+
+        setInvite(inviteResponse);
+        if (inviteResponse.canRenew || inviteResponse.canUpgradeEventManagement) {
+          setWorkspace(null);
+          return;
+        }
+
+        const workspaceResponse = await api.getInviteWorkspace(inviteId);
         if (!mounted) return;
 
         setWorkspace(workspaceResponse);
@@ -254,14 +263,6 @@ const InviteOperations = () => {
           ...current,
           language: workspaceResponse.defaultLanguage,
         }));
-
-        if (workspaceResponse.permissions.includes("edit_content") || workspaceResponse.accessRole === "owner") {
-          const inviteResponse = await api.getInvite(inviteId);
-          if (!mounted) return;
-          setInvite(inviteResponse);
-        } else {
-          setInvite(null);
-        }
       })
       .catch(() => {
         if (!mounted) return;
@@ -823,7 +824,58 @@ const InviteOperations = () => {
     });
   };
 
-  if (loading || !workspace || !rsvpForm || !localizationForm) {
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-6 space-y-4">
+        <Skeleton className="h-24 rounded-2xl" />
+        <Skeleton className="h-[680px] rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (invite?.canRenew) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="max-w-xl rounded-2xl border border-border bg-card p-8 text-center space-y-4">
+          <h1 className="font-display text-3xl font-semibold">Renew this invite first</h1>
+          <p className="text-sm text-muted-foreground">
+            Event management is locked because this invite has passed its 3 month validity window.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button onClick={() => navigate(`/checkout/${invite.templateSlug}?intent=renewal&inviteId=${invite.id}`)}>
+              Renew invite
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/dashboard">Back to dashboard</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (invite?.canUpgradeEventManagement) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="max-w-xl rounded-2xl border border-border bg-card p-8 text-center space-y-4">
+          <h1 className="font-display text-3xl font-semibold">Unlock event tools</h1>
+          <p className="text-sm text-muted-foreground">
+            This Package B invite is live, but guest management, RSVP tools, reminders, localization, and exports are still locked.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button onClick={() => navigate(`/checkout/${invite.templateSlug}?intent=event_management_addon&inviteId=${invite.id}`)}>
+              Unlock event management
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to={`/dashboard/invites/${invite.id}/edit`}>Edit invite</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!workspace || !rsvpForm || !localizationForm) {
     return (
       <div className="min-h-screen bg-background p-6 space-y-4">
         <Skeleton className="h-24 rounded-2xl" />

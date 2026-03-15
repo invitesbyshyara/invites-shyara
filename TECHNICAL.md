@@ -3,6 +3,24 @@
 > **Master reference for all developers.** Covers architecture, API contracts, database schema,
 > authentication flows, deployment, and conventions for both the frontend and backend.
 
+> **March 2026 package rollout note**: live pricing, entitlements, and validity are now governed by the package split documented in `PACKAGE_ENTITLEMENTS_IMPLEMENTATION.md`. If you see older single-price, free-tier, or perpetual-access examples later in this file, treat them as legacy references and prefer the package rollout document.
+
+## Current Package Reference
+
+| Concern | Current state |
+|---|---|
+| Packages | `package_a`, `package_b` |
+| Transaction kinds | `initial_purchase`, `event_management_addon`, `renewal` |
+| Package A price | $149 / €169 |
+| Package B price | $99 / €119 |
+| Package B add-on | $99 / €99 |
+| Renewal | $14 / €20 |
+| Invite validity | 3 months |
+| Invite entitlement fields | `packageCode`, `eventManagementEnabled`, `validUntil` |
+| Derived API flags | `canRenew`, `canUpgradeEventManagement` |
+
+Schema changes, migration behavior, gating rules, and debug steps live in `PACKAGE_ENTITLEMENTS_IMPLEMENTATION.md`.
+
 ---
 
 ## Table of Contents

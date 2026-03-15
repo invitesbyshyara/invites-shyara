@@ -78,7 +78,9 @@ const Templates: React.FC = () => {
                   <StatusBadge status={t.isVisible ? 'visible' : 'hidden'} />
                 </div>
                 <div className="flex items-center gap-1 flex-wrap">
-                  <StatusBadge status={t.isFree ? 'free' : 'premium'} />
+                  <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-medium uppercase text-secondary-foreground">
+                    {t.packageCode.replace('_', ' ')}
+                  </span>
                   <span className="text-xs text-muted-foreground">{t.category}</span>
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -112,7 +114,7 @@ const Templates: React.FC = () => {
             <tbody>{templates.map(t => (
               <tr key={t.slug} className="border-b border-border last:border-0">
                 <td className="px-3 py-2 font-medium text-foreground">{t.name} {t.isFeatured && <span className="text-amber-500">â˜…</span>}</td>
-                <td className="px-3 py-2 text-muted-foreground capitalize">{t.category}</td>
+                <td className="px-3 py-2 text-muted-foreground capitalize">{t.category} · {t.packageCode.replace('_', ' ')}</td>
                 <td className="px-3 py-2">${(t.priceUsd / 100).toFixed(2)} / €{(t.priceEur / 100).toFixed(2)}</td>
                 <td className="px-3 py-2"><StatusBadge status={t.isVisible ? 'visible' : 'hidden'} /></td>
                 <td className="px-3 py-2">{t.purchaseCount}</td>

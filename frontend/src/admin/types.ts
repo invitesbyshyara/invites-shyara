@@ -33,6 +33,11 @@ export interface AdminInvite {
   templateSlug: string;
   templateName: string;
   templateCategory: string;
+  packageCode: 'package_a' | 'package_b';
+  eventManagementEnabled: boolean;
+  validUntil: string;
+  canRenew?: boolean;
+  canUpgradeEventManagement?: boolean;
   eventName: string;
   slug: string;
   status: 'draft' | 'published' | 'expired' | 'taken-down';
@@ -49,6 +54,13 @@ export interface AdminTransaction {
   customerName: string;
   templateSlug: string;
   templateName: string;
+  packageCode: 'package_a' | 'package_b';
+  kind: 'initial_purchase' | 'event_management_addon' | 'renewal';
+  inviteId?: string;
+  inviteSlug?: string;
+  inviteStatus?: AdminInvite['status'];
+  inviteValidUntil?: string;
+  inviteEventManagementEnabled?: boolean;
   amount: number;
   currency: string;
   date: string;
@@ -61,6 +73,7 @@ export interface AdminTemplate {
   slug: string;
   name: string;
   category: string;
+  packageCode: 'package_a' | 'package_b';
   tags: string[];
   price: number;
   priceUsd: number;

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { Prisma, UserPlan, UserStatus } from "@prisma/client";
@@ -7,10 +8,13 @@ import { prisma } from "../../lib/prisma";
 import { sanitizeEmail, sanitizeOptionalText, sanitizePlainText } from "../../lib/sanitize";
 import { requirePermission, verifyAdminToken } from "../../middleware/adminAuth";
 import { validate } from "../../middleware/validate";
+import { buildInitialInviteEntitlements } from "../../services/packageEntitlements";
 import { AppError, asyncHandler, createPagination, parsePagination, sendSuccess } from "../../utils/http";
 
 const router = Router();
 router.use(verifyAdminToken);
+
+const makeDraftSlug = (userId: string) => `draft-${userId.slice(0, 6)}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
 
 router.get(
   "/",
@@ -306,11 +310,23 @@ router.post(
       update: {},
     });
 
+    const invite = await prisma.invite.create({
+      data: {
+        userId: id,
+        templateSlug,
+        templateCategory: template.category,
+        ...buildInitialInviteEntitlements(template.packageCode),
+        slug: makeDraftSlug(id),
+        status: "draft",
+        data: {},
+      },
+    });
+
     await prisma.adminNote.create({
       data: {
         entityId: id,
         entityType: "customer",
-        note: `Unlocked template ${templateSlug}. Reason: ${reason}`,
+        note: `Unlocked template ${templateSlug} and created invite ${invite.id}. Reason: ${reason}`,
         createdById: req.admin!.id,
       },
     });
@@ -320,10 +336,10 @@ router.post(
       action: "MANUAL_TEMPLATE_UNLOCK",
       entityType: "user",
       entityId: id,
-      details: { templateSlug, reason },
+      details: { templateSlug, inviteId: invite.id, reason },
     });
 
-    return sendSuccess(res, unlocked);
+    return sendSuccess(res, { unlocked, invite });
   }),
 );
 
@@ -395,7 +411,7 @@ router.get(
       ...transactions.map((transaction) => ({
         type: "transaction",
         id: transaction.id,
-        message: `Transaction ${transaction.status} for ${transaction.templateSlug}`,
+        message: `${transaction.kind} transaction ${transaction.status} for ${transaction.templateSlug}`,
         timestamp: transaction.createdAt,
       })),
       ...notes.map((note) => ({

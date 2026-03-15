@@ -20,6 +20,14 @@ import {
   refundPendingCapturedPaymentForLock,
 } from "../services/customerAcquisitionLock";
 import { sendOrderConfirmationEmail, sendPaymentFailedEmail } from "../services/email";
+import {
+  buildInitialInviteEntitlements,
+  deriveInviteEntitlements,
+  extendInviteValidity,
+  isPromoAllowedForIntent,
+  resolvePackagePrice,
+  type CheckoutIntent,
+} from "../services/packageEntitlements";
 import { logger } from "../lib/logger";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
 
@@ -115,9 +123,27 @@ router.post(
 );
 
 const createOrderSchema = z.object({
-  templateSlug: z.string().min(1),
+  intent: z.enum(["initial_purchase", "event_management_addon", "renewal"]).default("initial_purchase"),
+  templateSlug: z.string().min(1).optional(),
+  inviteId: z.string().min(1).optional(),
   currency: z.enum(["usd", "eur"]),
   promoCode: z.string().min(1).optional(),
+}).superRefine((value, ctx) => {
+  if (value.intent === "initial_purchase" && !value.templateSlug) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["templateSlug"],
+      message: "Template slug is required for an initial purchase",
+    });
+  }
+
+  if (value.intent !== "initial_purchase" && !value.inviteId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["inviteId"],
+      message: "Invite ID is required for add-on and renewal purchases",
+    });
+  }
 });
 
 router.post(
@@ -132,36 +158,120 @@ router.post(
     }
 
     const user = req.user!;
-    const { templateSlug, currency, promoCode } = req.body;
+    const {
+      intent,
+      templateSlug: requestedTemplateSlug,
+      inviteId,
+      currency,
+      promoCode,
+    } = req.body as {
+      intent: CheckoutIntent;
+      templateSlug?: string;
+      inviteId?: string;
+      currency: "usd" | "eur";
+      promoCode?: string;
+    };
 
-    const template = await prisma.template.findUnique({ where: { slug: templateSlug } });
-    if (!template) {
-      throw new AppError("Template not found", 404);
+    let templateSlug = requestedTemplateSlug ?? "";
+    let packageCode: "package_a" | "package_b";
+    let template:
+      | {
+          slug: string;
+          name: string;
+          category: typeof Prisma.ModelName extends never ? never : any;
+          packageCode: "package_a" | "package_b";
+        }
+      | null = null;
+    let invite:
+      | {
+          id: string;
+          templateSlug: string;
+          packageCode: "package_a" | "package_b";
+          eventManagementEnabled: boolean;
+          validUntil: Date;
+          status: "draft" | "published" | "expired" | "taken_down";
+        }
+      | null = null;
+
+    if (intent === "initial_purchase") {
+      template = await prisma.template.findUnique({
+        where: { slug: templateSlug },
+        select: {
+          slug: true,
+          name: true,
+          category: true,
+          packageCode: true,
+        },
+      });
+      if (!template) {
+        throw new AppError("Template not found", 404);
+      }
+      packageCode = template.packageCode;
+    } else {
+      invite = await prisma.invite.findFirst({
+        where: {
+          id: inviteId,
+          userId: user.id,
+        },
+        select: {
+          id: true,
+          templateSlug: true,
+          packageCode: true,
+          eventManagementEnabled: true,
+          validUntil: true,
+          status: true,
+        },
+      });
+
+      if (!invite) {
+        throw new AppError("Invite not found", 404);
+      }
+
+      templateSlug = invite.templateSlug;
+      packageCode = invite.packageCode;
+
+      const entitlements = deriveInviteEntitlements({
+        packageCode: invite.packageCode,
+        eventManagementEnabled: invite.eventManagementEnabled,
+        validUntil: invite.validUntil,
+        status: invite.status,
+      });
+
+      if (intent === "event_management_addon") {
+        if (invite.packageCode !== "package_b") {
+          throw new AppError("Only Package B invites can unlock event management later", 400);
+        }
+
+        if (invite.eventManagementEnabled) {
+          throw new AppError("Event management is already enabled for this invite", 409);
+        }
+      }
+
+      if (intent === "renewal" && !entitlements.isExpired) {
+        throw new AppError("Invite renewal is only available after expiry", 409);
+      }
     }
 
-    const existingPurchase = await prisma.userTemplate.findUnique({
-      where: {
-        userId_templateSlug: {
-          userId: user.id,
-          templateSlug,
-        },
-      },
-    });
-
-    if (existingPurchase) {
-      throw new AppError("Template already purchased", 409);
+    if (promoCode && !isPromoAllowedForIntent(intent)) {
+      throw new AppError("Promo codes only apply to initial purchases", 400);
     }
 
     const promo = promoCode ? await resolvePromo(promoCode, templateSlug) : undefined;
-    const baseAmount = currency === "usd" ? template.priceUsd : template.priceEur;
+    const baseAmount = resolvePackagePrice({ intent, packageCode, currency });
     const { discountAmount, finalAmount } = calculateAmount(baseAmount, promo);
 
     if (finalAmount === 0) {
+      if (intent !== "initial_purchase" || !template) {
+        throw new AppError("This order cannot be completed without payment", 400);
+      }
+
       const result = await prisma.$transaction(async (tx) => {
         const transaction = await tx.transaction.create({
           data: {
             userId: user.id,
             templateSlug,
+            packageCode,
+            kind: intent,
             amount: 0,
             currency: currency.toUpperCase(),
             status: "success",
@@ -178,26 +288,31 @@ router.post(
           update: { transactionId: transaction.id },
         });
 
-        if (template.isPremium || baseAmount > 0) {
-          await tx.template.update({
-            where: { slug: templateSlug },
-            data: { purchaseCount: { increment: 1 } },
-          });
-        }
+        await tx.template.update({
+          where: { slug: templateSlug },
+          data: { purchaseCount: { increment: 1 } },
+        });
 
         if (promo) {
           await incrementPromoUsageAtomically(tx, { id: promo.id });
         }
 
+        const initialEntitlements = buildInitialInviteEntitlements(packageCode);
         const invite = await tx.invite.create({
           data: {
             userId: user.id,
             templateSlug,
             templateCategory: template.category,
+            ...initialEntitlements,
             slug: makeDraftSlug(user.id),
             status: "draft",
             data: {},
           },
+        });
+
+        await tx.transaction.update({
+          where: { id: transaction.id },
+          data: { inviteId: invite.id },
         });
 
         return { inviteId: invite.id, transactionId: transaction.id };
@@ -226,6 +341,9 @@ router.post(
       notes: {
         userId: user.id,
         templateSlug,
+        intent,
+        inviteId: invite?.id ?? "",
+        packageCode,
         promoCode: promo?.code ?? "",
       },
     });
@@ -234,6 +352,9 @@ router.post(
       data: {
         userId: user.id,
         templateSlug,
+        packageCode,
+        kind: intent,
+        inviteId: invite?.id,
         amount: finalAmount,
         currency: currency.toUpperCase(),
         status: "pending",
@@ -282,7 +403,7 @@ const completeTransactionByOrderId = async (
 
   if (transaction.status === "success") {
     return {
-      inviteId: await findExistingInvite(tx, transaction.userId, transaction.templateSlug),
+      inviteId: transaction.inviteId ?? await findExistingInvite(tx, transaction.userId, transaction.templateSlug),
       transactionId: transaction.id,
       wasNewlyCompleted: false as const,
       templateSlug: transaction.templateSlug,
@@ -308,7 +429,7 @@ const completeTransactionByOrderId = async (
     const latest = await tx.transaction.findUniqueOrThrow({ where: { id: transaction.id } });
     if (latest.status === "success") {
       return {
-        inviteId: await findExistingInvite(tx, latest.userId, latest.templateSlug),
+        inviteId: latest.inviteId ?? await findExistingInvite(tx, latest.userId, latest.templateSlug),
         transactionId: latest.id,
         wasNewlyCompleted: false as const,
         templateSlug: latest.templateSlug,
@@ -320,40 +441,89 @@ const completeTransactionByOrderId = async (
     throw new AppError("Transaction already processed", 409);
   }
 
-  const template = await tx.template.findUniqueOrThrow({ where: { slug: transaction.templateSlug } });
+  let inviteId = transaction.inviteId ?? null;
 
-  await tx.userTemplate.upsert({
-    where: {
-      userId_templateSlug: { userId: transaction.userId, templateSlug: transaction.templateSlug },
-    },
-    create: { userId: transaction.userId, templateSlug: transaction.templateSlug, transactionId: transaction.id },
-    update: { transactionId: transaction.id },
-  });
+  if (transaction.kind === "initial_purchase") {
+    const template = await tx.template.findUniqueOrThrow({ where: { slug: transaction.templateSlug } });
 
-  await tx.template.update({
-    where: { slug: template.slug },
-    data: { purchaseCount: { increment: 1 } },
-  });
+    await tx.userTemplate.upsert({
+      where: {
+        userId_templateSlug: { userId: transaction.userId, templateSlug: transaction.templateSlug },
+      },
+      create: { userId: transaction.userId, templateSlug: transaction.templateSlug, transactionId: transaction.id },
+      update: { transactionId: transaction.id },
+    });
 
-  if (transaction.promoCode) {
-    await incrementPromoUsageAtomically(tx, {
-      code: { equals: transaction.promoCode, mode: "insensitive" },
+    await tx.template.update({
+      where: { slug: template.slug },
+      data: { purchaseCount: { increment: 1 } },
+    });
+
+    if (transaction.promoCode) {
+      await incrementPromoUsageAtomically(tx, {
+        code: { equals: transaction.promoCode, mode: "insensitive" },
+      });
+    }
+
+    const initialEntitlements = buildInitialInviteEntitlements(transaction.packageCode);
+    const invite = await tx.invite.create({
+      data: {
+        userId: transaction.userId,
+        templateSlug: transaction.templateSlug,
+        templateCategory: template.category,
+        ...initialEntitlements,
+        slug: makeDraftSlug(transaction.userId),
+        status: "draft",
+        data: {},
+      },
+    });
+
+    inviteId = invite.id;
+  } else {
+    if (!transaction.inviteId) {
+      throw new AppError("Invite not found for this transaction", 404);
+    }
+
+    const invite = await tx.invite.findFirst({
+      where: {
+        id: transaction.inviteId,
+        userId: transaction.userId,
+      },
+    });
+
+    if (!invite) {
+      throw new AppError("Invite not found for this transaction", 404);
+    }
+
+    if (transaction.kind === "event_management_addon") {
+      await tx.invite.update({
+        where: { id: invite.id },
+        data: { eventManagementEnabled: true },
+      });
+    }
+
+    if (transaction.kind === "renewal") {
+      await tx.invite.update({
+        where: { id: invite.id },
+        data: {
+          validUntil: extendInviteValidity(invite.validUntil, new Date()),
+          ...(invite.status === "expired" ? { status: "published" } : {}),
+        },
+      });
+    }
+
+    inviteId = invite.id;
+  }
+
+  if (inviteId && inviteId !== transaction.inviteId) {
+    await tx.transaction.update({
+      where: { id: transaction.id },
+      data: { inviteId },
     });
   }
 
-  const invite = await tx.invite.create({
-    data: {
-      userId: transaction.userId,
-      templateSlug: transaction.templateSlug,
-      templateCategory: template.category,
-      slug: makeDraftSlug(transaction.userId),
-      status: "draft",
-      data: {},
-    },
-  });
-
   return {
-    inviteId: invite.id,
+    inviteId,
     transactionId: transaction.id,
     wasNewlyCompleted: true as const,
     templateSlug: transaction.templateSlug,

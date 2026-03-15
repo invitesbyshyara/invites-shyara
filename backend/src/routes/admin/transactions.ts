@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { Prisma, TransactionStatus } from "@prisma/client";
+import { PackageCode, Prisma, TransactionKind, TransactionStatus } from "@prisma/client";
 import { z } from "zod";
 import { logAudit } from "../../lib/audit";
 import { prisma } from "../../lib/prisma";
@@ -17,16 +17,24 @@ router.get(
   validate({
     query: z.object({
       status: z.enum(["pending", "success", "failed", "refunded"]).optional(),
+      kind: z.enum(["initial_purchase", "event_management_addon", "renewal"]).optional(),
+      packageCode: z.enum(["package_a", "package_b"]).optional(),
       page: z.coerce.number().int().min(1).default(1),
       limit: z.coerce.number().int().min(1).max(100).default(20),
     }),
   }),
   asyncHandler(async (req, res) => {
-    const { status } = req.query as { status?: TransactionStatus };
+    const { status, kind, packageCode } = req.query as {
+      status?: TransactionStatus;
+      kind?: TransactionKind;
+      packageCode?: PackageCode;
+    };
     const { page, limit, skip } = parsePagination(req);
 
     const where: Prisma.TransactionWhereInput = {
       ...(status ? { status } : {}),
+      ...(kind ? { kind } : {}),
+      ...(packageCode ? { packageCode } : {}),
     };
 
     const [total, transactions, revenueAgg, successCount, failedCount, refundedCount] = await Promise.all([
@@ -39,6 +47,16 @@ router.get(
               id: true,
               name: true,
               email: true,
+            },
+          },
+          invite: {
+            select: {
+              id: true,
+              slug: true,
+              status: true,
+              packageCode: true,
+              eventManagementEnabled: true,
+              validUntil: true,
             },
           },
         },
@@ -147,6 +165,16 @@ router.get(
               id: true,
               name: true,
               email: true,
+            },
+          },
+          invite: {
+            select: {
+              id: true,
+              slug: true,
+              status: true,
+              packageCode: true,
+              eventManagementEnabled: true,
+              validUntil: true,
             },
           },
         },

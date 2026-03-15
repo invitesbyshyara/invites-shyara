@@ -5,6 +5,7 @@ import {
   AdminUser,
 } from '../types';
 import { buildCanonicalApiBase } from '@/lib/apiBase';
+import { mapAdminInvite, mapAdminTransaction } from './mappers';
 
 // ─── Config ──────────────────────────────────────────────────────
 
@@ -106,9 +107,6 @@ const rPaged = async <T>(path: string, options?: RequestInit): Promise<{ data: T
 
 // ─── Normalizers ─────────────────────────────────────────────────
 
-const normalizeInviteStatus = (s: string) =>
-  (s === 'taken_down' ? 'taken-down' : s) as AdminInvite['status'];
-
 const mapCustomer = (u: Record<string, unknown>): AdminCustomer => ({
   id: u.id as string,
   name: u.name as string,
@@ -123,42 +121,15 @@ const mapCustomer = (u: Record<string, unknown>): AdminCustomer => ({
   plan: u.plan as 'free' | 'premium',
 });
 
-const mapInvite = (i: Record<string, unknown>): AdminInvite => ({
-  id: i.id as string,
-  customerId: (i.userId as string | undefined) ?? (i.customerId as string),
-  customerName: (i.customerName as string | undefined) ?? '',
-  customerEmail: (i.customerEmail as string | undefined) ?? '',
-  templateSlug: i.templateSlug as string,
-  templateName: (i.templateName as string | undefined) ?? (i.templateSlug as string),
-  templateCategory: (i.templateCategory as string).replace(/_/g, '-'),
-  eventName: (i.eventName as string | undefined) ?? '',
-  slug: i.slug as string,
-  status: normalizeInviteStatus(i.status as string),
-  eventDate: (i.eventDate as string | null) ?? '',
-  rsvpCount: (i.rsvpCount as number | undefined) ?? 0,
-  viewCount: (i.viewCount as number | undefined) ?? 0,
-  createdAt: i.createdAt as string,
-  updatedAt: i.updatedAt as string,
-});
+const mapInvite = (i: Record<string, unknown>): AdminInvite => mapAdminInvite(i);
 
-const mapTransaction = (t: Record<string, unknown>): AdminTransaction => ({
-  id: t.id as string,
-  customerId: (t.userId as string | undefined) ?? (t.customerId as string),
-  customerName: (t.customerName as string | undefined) ?? '',
-  templateSlug: t.templateSlug as string,
-  templateName: (t.templateName as string | undefined) ?? (t.templateSlug as string),
-  amount: t.amount as number,
-  currency: (t.currency as string | undefined) ?? 'USD',
-  date: t.createdAt as string,
-  status: t.status as AdminTransaction['status'],
-  failureReason: (t.failureReason as string | null) ?? undefined,
-  refundAmount: undefined,
-});
+const mapTransaction = (t: Record<string, unknown>): AdminTransaction => mapAdminTransaction(t);
 
 const mapTemplate = (t: Record<string, unknown>): AdminTemplate => ({
   slug: t.slug as string,
   name: t.name as string,
   category: (t.category as string).replace(/_/g, '-'),
+  packageCode: ((t.packageCode as string | undefined) ?? 'package_a') as AdminTemplate['packageCode'],
   tags: (t.tags as string[]) ?? [],
   price: t.price as number,
   priceUsd: (t.priceUsd as number | undefined) ?? 0,
@@ -497,6 +468,7 @@ export const adminApi = {
 
   createTemplate: async (data: {
     slug: string; name: string; category: string; tags?: string[];
+    packageCode: 'package_a' | 'package_b';
     isPremium: boolean; price?: number; priceUsd?: number; priceEur?: number; isVisible: boolean; isFeatured: boolean;
   }) => {
     const t = await r<Record<string, unknown>>('/templates', { method: 'POST', body: JSON.stringify(data) });
@@ -504,7 +476,7 @@ export const adminApi = {
   },
 
   updateTemplate: async (slug: string, data: Partial<{
-    name: string; isPremium: boolean; price: number; priceUsd: number; priceEur: number;
+    name: string; packageCode: 'package_a' | 'package_b'; isPremium: boolean; price: number; priceUsd: number; priceEur: number;
     isVisible: boolean; isFeatured: boolean; sortOrder: number;
   }>) => {
     const t = await r<Record<string, unknown>>(`/templates/${slug}`, { method: 'PUT', body: JSON.stringify(data) });

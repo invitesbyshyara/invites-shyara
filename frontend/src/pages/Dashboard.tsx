@@ -21,6 +21,7 @@ import TemplateThumbnail from "@/components/TemplateThumbnail";
 import { getTemplateBySlug } from "@/templates/registry";
 import { buildShareMessage } from "@/utils/share";
 import { getEventDateFromData, getInviteHeadline } from "@/utils/invite";
+import { getPackageDisplayName } from "@/lib/packageCatalog";
 
 const statusBorderColor: Record<string, string> = {
   published: "border-l-4 border-l-emerald-500",
@@ -99,6 +100,10 @@ const Dashboard = () => {
     invite.accessRole === "owner" ||
     Boolean(invite.permissions?.some((permission) => ["manage_rsvps", "handle_guest_support", "view_reports", "edit_content"].includes(permission)));
   const canDeleteInvite = (invite: Invite) => invite.accessRole === "owner" || (!invite.accessRole && invite.userId === user?.id);
+  const isInviteActive = (invite: Invite) => !invite.canRenew && invite.status !== "taken-down";
+  const canUseEventManagement = (invite: Invite) => isInviteActive(invite) && invite.eventManagementEnabled;
+  const openRenewalCheckout = (invite: Invite) => navigate(`/checkout/${invite.templateSlug}?intent=renewal&inviteId=${invite.id}`);
+  const openAddonCheckout = (invite: Invite) => navigate(`/checkout/${invite.templateSlug}?intent=event_management_addon&inviteId=${invite.id}`);
 
   const checklist = [
     { label: "Pick a template", complete: invites.length > 0 },
@@ -134,7 +139,9 @@ const Dashboard = () => {
     setTimeout(() => setCopiedSlug(null), 2000);
   };
 
-  const firstPublishedInvite = invites.find((invite) => invite.status === "published" && canViewResponsesForInvite(invite));
+  const firstPublishedInvite = invites.find((invite) =>
+    invite.status === "published" && canViewResponsesForInvite(invite) && canUseEventManagement(invite)
+  );
 
   if (authLoading) {
     return (
@@ -319,7 +326,11 @@ const Dashboard = () => {
               const eventDate = getEventDateFromData(invite.data ?? {});
               const isDraft = invite.status === "draft";
               const isPublished = invite.status === "published";
-              const editPath = isDraft ? `/create/${invite.id}` : `/dashboard/invites/${invite.id}/edit`;
+              const editPath = `/dashboard/invites/${invite.id}/edit`;
+              const validUntilLabel = invite.validUntil
+                ? new Date(invite.validUntil).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                : "Not set";
+              const packageLabel = getPackageDisplayName(invite.packageCode);
 
               return (
                 <div
@@ -335,7 +346,9 @@ const Dashboard = () => {
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="min-w-0">
                         <h3 className="font-display font-semibold text-lg truncate">{title}</h3>
-                        <p className="text-xs text-muted-foreground font-body mt-0.5 capitalize">{invite.templateSlug.replace(/-/g, " ")}</p>
+                        <p className="text-xs text-muted-foreground font-body mt-0.5 capitalize">
+                          {invite.templateSlug.replace(/-/g, " ")} · {packageLabel}
+                        </p>
                         {invite.accessRole && invite.accessRole !== "owner" && (
                           <p className="text-xs text-muted-foreground font-body mt-0.5 capitalize">Role: {invite.accessRole}</p>
                         )}
@@ -375,6 +388,9 @@ const Dashboard = () => {
                     <div className="space-y-1.5 text-sm text-muted-foreground font-body mb-4">
                       <p>{eventDate ? `Event: ${new Date(eventDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : "Event date not added yet"}</p>
                       <p>{invite.rsvpCount} {invite.rsvpCount === 1 ? "response" : "responses"} collected</p>
+                      <p>Valid until {validUntilLabel}</p>
+                      {invite.canRenew && <p className="text-destructive">Renew this invite to restore access.</p>}
+                      {invite.canUpgradeEventManagement && <p className="text-primary">Invite is live, but RSVP and event tools are still locked.</p>}
                       {isPublished && invite.slug && (
                         <button
                           onClick={() => handleCopySlug(invite.slug!)}
@@ -387,21 +403,36 @@ const Dashboard = () => {
                     </div>
 
                     {/* Action buttons — primary actions visible, secondary in dropdown */}
-                    {isPublished && invite.slug ? (
+                    {invite.canRenew ? (
                       <div className="flex gap-2">
-                        {canViewResponsesForInvite(invite) && (
+                        <Button size="sm" className="flex-1" onClick={() => openRenewalCheckout(invite)}>
+                          Renew Invite
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1" disabled>
+                          Access locked
+                        </Button>
+                      </div>
+                    ) : isPublished && invite.slug ? (
+                      <div className="flex gap-2">
+                        {canUseEventManagement(invite) && canViewResponsesForInvite(invite) && (
                           <Button asChild size="sm" className="flex-1">
                             <Link to={`/dashboard/invites/${invite.id}/rsvps`}>View RSVPs</Link>
                           </Button>
                         )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className={canViewResponsesForInvite(invite) ? "flex-1" : "w-full"}
-                          onClick={() => navigate(`/dashboard/invites/${invite.id}/operations`)}
-                        >
-                          Manage Event
-                        </Button>
+                        {invite.canUpgradeEventManagement ? (
+                          <Button size="sm" variant="outline" className="flex-1" onClick={() => openAddonCheckout(invite)}>
+                            Unlock Event Tools
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={canViewResponsesForInvite(invite) ? "flex-1" : "w-full"}
+                            onClick={() => navigate(`/dashboard/invites/${invite.id}/operations`)}
+                          >
+                            Manage Event
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
@@ -419,14 +450,26 @@ const Dashboard = () => {
                             <Link to={editPath}>{isDraft ? "Edit Draft" : "Edit Invite"}</Link>
                           </Button>
                         )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className={canEditInvite(invite) ? "flex-1" : "w-full"}
-                          onClick={() => navigate(`/dashboard/invites/${invite.id}/operations`)}
-                        >
-                          Manage Event
-                        </Button>
+                        {invite.canUpgradeEventManagement ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={canEditInvite(invite) ? "flex-1" : "w-full"}
+                            onClick={() => openAddonCheckout(invite)}
+                          >
+                            Unlock Event Tools
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={canEditInvite(invite) ? "flex-1" : "w-full"}
+                            onClick={() => navigate(`/dashboard/invites/${invite.id}/operations`)}
+                            disabled={!canUseEventManagement(invite)}
+                          >
+                            Manage Event
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>

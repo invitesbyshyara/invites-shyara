@@ -13,7 +13,7 @@ const Terms = () => (
 
     <div className="container max-w-3xl py-16 px-4 font-body">
       <h1 className="font-display text-4xl font-bold mb-2">Terms of Service</h1>
-      <p className="text-sm text-muted-foreground mb-10">Last updated: February 2026</p>
+      <p className="text-sm text-muted-foreground mb-10">Last updated: March 2026</p>
 
       <div className="space-y-8 text-foreground">
         <section>
@@ -43,8 +43,9 @@ const Terms = () => (
           <h2 className="font-display text-xl font-semibold mb-3">4. Payments and Refunds</h2>
           <ul className="list-disc pl-6 space-y-2 text-muted-foreground leading-relaxed">
             <li>All prices are in USD or EUR and include applicable taxes where required.</li>
-            <li>Template purchases are processed securely through Razorpay.</li>
-            <li>Each purchase grants a perpetual, non-transferable license for one invite.</li>
+            <li>Invitation purchases, add-ons, and renewals are processed securely through Razorpay.</li>
+            <li>Package A includes the invite plus event-management features. Package B starts with the invite only and can unlock event management later with a separate add-on purchase.</li>
+            <li>Each invite stays active for 3 months from purchase or renewal. Renewal restores another validity window for the same invite.</li>
             <li>Refunds may be requested within 7 days if the invite has not been published.</li>
             <li>No refunds are issued for published invitations.</li>
           </ul>

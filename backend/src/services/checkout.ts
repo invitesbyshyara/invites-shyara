@@ -1,5 +1,6 @@
 import { InviteStatus, Prisma, PromoCode, Transaction } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { buildInitialInviteEntitlements } from "./packageEntitlements";
 import { AppError } from "../utils/http";
 
 export const validatePromoCode = async (code: string, templateSlug: string) => {
@@ -117,6 +118,7 @@ export const finalizeSuccessfulTransaction = async (params: {
         userId: transaction.userId,
         templateSlug: transaction.templateSlug,
         templateCategory: (await tx.template.findUniqueOrThrow({ where: { slug: transaction.templateSlug } })).category,
+        ...buildInitialInviteEntitlements(transaction.packageCode),
         slug: `${transaction.userId.slice(0, 6)}-${Date.now()}`,
         status: InviteStatus.draft,
         data: Prisma.JsonNull,

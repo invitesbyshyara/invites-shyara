@@ -51,7 +51,9 @@ const PublishSuccess = () => {
           <span className="text-4xl">🎉</span>
         </div>
         <h1 className="font-display text-3xl font-bold mb-2">Your invitation is live!</h1>
-        <p className="text-muted-foreground font-body mb-8">Share this link with your guests and watch the RSVPs roll in</p>
+        <p className="text-muted-foreground font-body mb-8">
+          Share this link with your guests. Every invite stays active for 3 months{invite?.canUpgradeEventManagement ? ", and this Package B invite can unlock event tools later." : "."}
+        </p>
 
         {/* Invite URL display */}
         <div className="p-4 rounded-xl bg-card border border-border mb-2">

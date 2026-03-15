@@ -1,6 +1,23 @@
 # Invites by Shyara — Customer Feature Reference
 
 > **Purpose**: Complete end-to-end customer feature reference for Invites by Shyara. This document covers every screen, section, interaction, and feature a customer encounters — from first visit to managing a live invitation. No technical knowledge required to read this document.
+>
+> **March 2026 rollout note**: the live product now uses Package A, Package B, a Package B event-management add-on, and 3 month invite validity with renewal. Use `PACKAGE_ENTITLEMENTS_IMPLEMENTATION.md` for the implementation-level reference.
+
+## Current Rollout Snapshot
+
+The live customer-facing model is now:
+
+| Item | Current behavior |
+|---|---|
+| Package A | $149 / €169, includes invite plus all event-management features |
+| Package B | $99 / €119, includes the invite first and uses the more premium design line |
+| Package B add-on | $99 / €99, unlocks RSVP and event-management later |
+| Validity | Every invite stays active for 3 months |
+| Renewal | $14 / €20 restores another 3 month window |
+| Expiry effect | Public access, RSVP, editor changes, and invite-ops are blocked until renewal |
+
+Any older single-price, perpetual-access, or free-tier references lower in this document should be treated as legacy notes, not the live commercial model.
 
 ---
 

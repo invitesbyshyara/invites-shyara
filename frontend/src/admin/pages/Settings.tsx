@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { RotateCcw } from 'lucide-react';
+import { getCheckoutPrice } from '@/lib/packageCatalog';
 
 const Settings: React.FC = () => {
   const { toast } = useToast();
@@ -48,7 +49,6 @@ const Settings: React.FC = () => {
     if (!initialSettings || !settings) return;
     switch (section) {
       case 'currency': update({ currency: initialSettings.currency }); break;
-      case 'pricing': update({ defaultPremiumPrice: initialSettings.defaultPremiumPrice }); break;
       case 'fileSizes': update({ maxFileSizes: { ...initialSettings.maxFileSizes } }); break;
       case 'rsvp': update({ rsvpDeadlineDays: initialSettings.rsvpDeadlineDays }); break;
       case 'maintenance': update({ maintenanceMode: initialSettings.maintenanceMode }); break;
@@ -88,11 +88,40 @@ const Settings: React.FC = () => {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm">Pricing Defaults</CardTitle>
-              <button onClick={() => resetSection('pricing')} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"><RotateCcw className="h-3 w-3" /> Reset</button>
             </div>
+            <CardDescription>Checkout pricing is now fixed by package, add-on, and renewal intent.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2 max-w-xs"><Label>Default premium template price</Label><Input type="number" value={settings!.defaultPremiumPrice} onChange={e => update({ defaultPremiumPrice: Number(e.target.value) })} /></div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border border-border bg-background p-3">
+                <p className="text-sm font-medium text-foreground">Package A</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  ${ (getCheckoutPrice('initial_purchase', 'package_a', 'USD') / 100).toFixed(2) } / €{ (getCheckoutPrice('initial_purchase', 'package_a', 'EUR') / 100).toFixed(2) }
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">All features included from day one.</p>
+              </div>
+              <div className="rounded-md border border-border bg-background p-3">
+                <p className="text-sm font-medium text-foreground">Package B</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  ${ (getCheckoutPrice('initial_purchase', 'package_b', 'USD') / 100).toFixed(2) } / €{ (getCheckoutPrice('initial_purchase', 'package_b', 'EUR') / 100).toFixed(2) }
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">Invite-only first, with a premium design direction.</p>
+              </div>
+              <div className="rounded-md border border-border bg-background p-3">
+                <p className="text-sm font-medium text-foreground">Package B add-on</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  ${ (getCheckoutPrice('event_management_addon', 'package_b', 'USD') / 100).toFixed(2) } / €{ (getCheckoutPrice('event_management_addon', 'package_b', 'EUR') / 100).toFixed(2) }
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">Unlocks RSVP and the event-management workspace later.</p>
+              </div>
+              <div className="rounded-md border border-border bg-background p-3">
+                <p className="text-sm font-medium text-foreground">Renewal</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  ${ (getCheckoutPrice('renewal', 'package_a', 'USD') / 100).toFixed(2) } / €{ (getCheckoutPrice('renewal', 'package_a', 'EUR') / 100).toFixed(2) }
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">Restores another 3 month validity window.</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

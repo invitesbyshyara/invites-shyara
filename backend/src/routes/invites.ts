@@ -15,6 +15,7 @@ import {
   getInviteAccess,
   normalizeInviteDataForPersistence,
 } from "../services/inviteOps";
+import { buildInitialInviteEntitlements, deriveInviteEntitlements } from "../services/packageEntitlements";
 import {
   markInviteDataTranslationsStale,
   refreshInviteTranslations,
@@ -37,6 +38,81 @@ const asDataRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+
+const withInviteEntitlements = <
+  T extends {
+    packageCode: "package_a" | "package_b";
+    eventManagementEnabled: boolean;
+    validUntil: Date;
+    status: "draft" | "published" | "expired" | "taken_down";
+  },
+>(invite: T) => {
+  const entitlements = deriveInviteEntitlements({
+    packageCode: invite.packageCode,
+    eventManagementEnabled: invite.eventManagementEnabled,
+    validUntil: invite.validUntil,
+    status: invite.status,
+  });
+
+  return {
+    ...invite,
+    status: entitlements.effectiveStatus,
+    canRenew: entitlements.canRenew,
+    canUpgradeEventManagement: entitlements.canUpgradeEventManagement,
+  };
+};
+
+const assertInviteEditingAllowed = (invite: {
+  packageCode: "package_a" | "package_b";
+  eventManagementEnabled: boolean;
+  validUntil: Date;
+  status: "draft" | "published" | "expired" | "taken_down";
+}) => {
+  const entitlements = deriveInviteEntitlements({
+    packageCode: invite.packageCode,
+    eventManagementEnabled: invite.eventManagementEnabled,
+    validUntil: invite.validUntil,
+    status: invite.status,
+  });
+
+  if (entitlements.isExpired) {
+    throw new AppError("Invite has expired and must be renewed before it can be edited", 410, {
+      code: "INVITE_EXPIRED",
+    });
+  }
+
+  if (invite.status === "taken_down") {
+    throw new AppError("Invite has been taken down", 403, {
+      code: "INVITE_TAKEN_DOWN",
+    });
+  }
+};
+
+const assertEventManagementAllowed = (invite: {
+  packageCode: "package_a" | "package_b";
+  eventManagementEnabled: boolean;
+  validUntil: Date;
+  status: "draft" | "published" | "expired" | "taken_down";
+}) => {
+  const entitlements = deriveInviteEntitlements({
+    packageCode: invite.packageCode,
+    eventManagementEnabled: invite.eventManagementEnabled,
+    validUntil: invite.validUntil,
+    status: invite.status,
+  });
+
+  if (entitlements.isExpired) {
+    throw new AppError("Invite has expired and must be renewed before event management can continue", 410, {
+      code: "INVITE_EXPIRED",
+    });
+  }
+
+  if (!entitlements.eventManagementAccessible) {
+    throw new AppError("Event management is not enabled for this invite", 403, {
+      code: "EVENT_MANAGEMENT_LOCKED",
+    });
+  }
+};
 
 const requireInviteAccess = async (
   userId: string,
@@ -94,7 +170,7 @@ router.get(
     });
 
     const enriched = invites.map((invite) => ({
-      ...invite,
+      ...withInviteEntitlements(invite),
       rsvpCount: invite._count.rsvps,
       accessRole: invite.userId === userId ? "owner" : invite.collaborators[0]?.roleLabel ?? "collaborator",
       permissions: invite.userId === userId ? [...COLLABORATOR_PERMISSIONS] : invite.collaborators[0]?.permissions ?? [],
@@ -157,13 +233,9 @@ router.post(
         userId: user.id,
         templateSlug,
         templateCategory: template.category,
+        ...buildInitialInviteEntitlements(template.packageCode),
         slug,
         data: dataWithTranslationState,
-      },
-      include: {
-        _count: {
-          select: { rsvps: true },
-        },
       },
     });
 
@@ -172,8 +244,8 @@ router.post(
     return sendSuccess(
       res,
       {
-        ...invite,
-        rsvpCount: invite._count.rsvps,
+        ...withInviteEntitlements(invite),
+        rsvpCount: 0,
       },
       undefined,
       201,
@@ -254,7 +326,7 @@ router.get(
     }
 
     return sendSuccess(res, {
-      ...invite,
+      ...withInviteEntitlements(invite),
       rsvpCount: invite._count.rsvps,
       accessRole: access.isOwner ? "owner" : access.collaborator?.roleLabel ?? "collaborator",
       permissions: access.isOwner ? [...COLLABORATOR_PERMISSIONS] : access.collaborator?.permissions ?? [],
@@ -273,6 +345,7 @@ router.get(
       "view_reports",
       "edit_content",
     ]);
+    assertEventManagementAllowed(access.invite);
 
     const rsvps = await prisma.rsvp.findMany({
       where: { inviteId: access.invite.id },
@@ -307,6 +380,7 @@ router.put(
 
     const access = await requireInviteAccess(req.user!.id, id, ["edit_content"]);
     const existing = access.invite;
+    assertInviteEditingAllowed(existing);
 
     if (slug !== undefined) {
       if (!validateSlugFormat(slug)) {
@@ -365,7 +439,7 @@ router.put(
     }
 
     return sendSuccess(res, {
-      ...updated,
+      ...withInviteEntitlements(updated),
       rsvpCount: updated._count.rsvps,
       accessRole: access.isOwner ? "owner" : access.collaborator?.roleLabel ?? "collaborator",
       permissions: access.isOwner ? [...COLLABORATOR_PERMISSIONS] : access.collaborator?.permissions ?? [],
