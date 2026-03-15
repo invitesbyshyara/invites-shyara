@@ -12,6 +12,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { api } from "@/services/api";
 import { allTemplates, categories } from "@/templates/registry";
 import { EventCategory, TemplateConfig } from "@/types";
+import { getPackageDisplayName } from "@/lib/packageCatalog";
 
 const POPULAR_SLUG = "rustic-charm";
 const platformTags = ["RSVP", "Broadcasts", "Ops Pack"];
@@ -80,7 +81,7 @@ const Gallery = () => {
       <div className="container px-4 py-10">
         <h1 className="mb-2 text-center font-serif text-3xl font-bold md:text-4xl">Template Gallery</h1>
         <p className="mb-8 text-center text-muted-foreground font-body">
-          Browse the available design, preview the full experience, and remember that Rustic Charm includes the same host-side system for RSVP handling, reminders, guest coordination, and event operations.
+          Browse both package directions, preview the guest-facing experience, and choose whether you want full event tools now or a premium invite-first package you can upgrade later.
         </p>
 
         <div className="mb-8 space-y-4 rounded-2xl border border-border bg-card p-4 md:p-5">
@@ -121,9 +122,9 @@ const Gallery = () => {
             <span className="hidden sm:inline">•</span>
             <span>Live sample experience available</span>
             <span className="hidden sm:inline">•</span>
-            <span>RSVP, reminders, and ops tools included after purchase</span>
+            <span>Every invite is valid for 3 months</span>
             <span className="hidden sm:inline">•</span>
-            <span>Personalization starts after purchase</span>
+            <span>Package B can unlock event management later</span>
           </div>
         </div>
 
@@ -175,10 +176,12 @@ const Gallery = () => {
                   <div className="p-4">
                     <h3 className="font-serif font-semibold">{template.name}</h3>
                     <p className="mt-1 text-xs text-muted-foreground font-body">
-                      Paid invite includes live link, RSVP tools, reminders, and event operations support.
+                      {getPackageDisplayName(template.packageCode)} · {template.packageCode === "package_a"
+                        ? "Invite plus full event-management support."
+                        : "Premium invite-first package with optional event-tool upgrade."}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {platformTags.map((tag) => (
+                      {(template.packageCode === "package_a" ? platformTags : ["Premium Design", "Invite", "Upgrade Later"]).map((tag) => (
                         <span key={tag} className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-medium text-secondary-foreground">
                           {tag}
                         </span>
@@ -197,7 +200,7 @@ const Gallery = () => {
                       <Button asChild size="sm" variant="outline" className="flex-1 text-xs">
                         <Link to={`/samples/${template.slug}`}>Live Sample</Link>
                       </Button>
-                      <PurchaseCtaButton slug={template.slug} openLabel="Buy & Customize" size="sm" className="flex-1 text-xs" />
+                      <PurchaseCtaButton slug={template.slug} openLabel={template.packageCode === "package_a" ? "Choose A" : "Choose B"} size="sm" className="flex-1 text-xs" />
                     </div>
                   </div>
                 </div>

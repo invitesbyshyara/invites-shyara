@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { EventCategory } from "@prisma/client";
+import { EventCategory, PackageCode } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma";
 import { sanitizePlainText, sanitizeTextList } from "../../lib/sanitize";
@@ -30,6 +30,7 @@ const createTemplateSchema = z.object({
     .refine((value) => Object.values(EventCategory).includes(value as EventCategory), {
       message: "Invalid category",
     }),
+  packageCode: z.nativeEnum(PackageCode),
   tags: z.array(z.string()).default([]),
   isPremium: z.boolean(),
   price: z.coerce.number().int().min(0).optional(),
@@ -49,6 +50,7 @@ router.post(
         slug: sanitizePlainText(req.body.slug, { maxLength: 80 }),
         name: sanitizePlainText(req.body.name, { maxLength: 120 }),
         category: req.body.category,
+        packageCode: req.body.packageCode,
         tags: sanitizeTextList(req.body.tags, 10, 40),
         isPremium: req.body.isPremium,
         price: req.body.price ?? 0,
@@ -81,6 +83,7 @@ router.get(
 
 const updateTemplateSchema = z.object({
   name: z.string().min(1).optional(),
+  packageCode: z.nativeEnum(PackageCode).optional(),
   isPremium: z.boolean().optional(),
   price: z.coerce.number().int().min(0).optional(),
   priceUsd: z.coerce.number().int().min(0).optional(),
@@ -99,6 +102,7 @@ router.put(
       where: { slug: req.params.slug },
       data: {
         ...(req.body.name !== undefined ? { name: sanitizePlainText(req.body.name, { maxLength: 120 }) } : {}),
+        ...(req.body.packageCode !== undefined ? { packageCode: req.body.packageCode } : {}),
         ...(req.body.isPremium !== undefined ? { isPremium: req.body.isPremium } : {}),
         ...(req.body.price !== undefined ? { price: req.body.price } : {}),
         ...(req.body.priceUsd !== undefined ? { priceUsd: req.body.priceUsd } : {}),

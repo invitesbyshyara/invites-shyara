@@ -37,7 +37,7 @@ const QuickPreview = ({ template, open, onOpenChange }: QuickPreviewProps) => {
               {template.category.replace("-", " ")} • {formatPrice(price)}
             </p>
             <p className="text-sm text-muted-foreground font-body mt-3">
-              Preview the design first. Personalization starts after purchase.
+              Preview the design first. Package A includes full tools immediately, and Package B can add event management later.
             </p>
             <div className="grid sm:grid-cols-3 gap-3 mt-5">
               <Button variant="outline" className="font-body" asChild>

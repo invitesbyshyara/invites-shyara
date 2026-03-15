@@ -27,10 +27,10 @@ router.get("/:slug", async (req, res) => {
   try {
     const invite = await prisma.invite.findUnique({
       where: { slug },
-      select: { data: true, templateSlug: true, templateCategory: true, status: true },
+      select: { data: true, templateSlug: true, templateCategory: true, status: true, validUntil: true },
     });
 
-    if (invite && invite.status === "published") {
+    if (invite && invite.status === "published" && invite.validUntil > new Date()) {
       const data = (invite.data ?? {}) as Record<string, unknown>;
 
       // Build title from guest/host names

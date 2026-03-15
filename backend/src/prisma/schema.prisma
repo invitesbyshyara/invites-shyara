@@ -8,23 +8,34 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  name         String
-  email        String        @unique
-  passwordHash String?
-  googleId     String?       @unique
-  phone        String?
-  avatarUrl    String?
-  plan         UserPlan      @default(free)
-  status       UserStatus    @default(active)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  lastLoginAt  DateTime?
+  id                  String        @id @default(cuid())
+  name                String
+  email               String        @unique
+  passwordHash        String?
+  googleId            String?       @unique
+  phone               String?
+  avatarUrl           String?
+  plan                UserPlan      @default(free)
+  status              UserStatus    @default(active)
+  emailVerified       Boolean       @default(false)
+  unsubscribeToken    String?       @unique @default(cuid())
+  emailPreferences    Json          @default("{\"rsvpNotifications\": true, \"weeklyDigest\": false, \"marketing\": true}")
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  lastLoginAt         DateTime?
 
-  invites       Invite[]
-  purchases     UserTemplate[]
-  transactions  Transaction[]
-  refreshTokens RefreshToken[]
+  invites                    Invite[]
+  purchases                  UserTemplate[]
+  transactions               Transaction[]
+  refreshTokens              RefreshToken[]
+  passwordResetChallenges    PasswordResetChallenge[]
+  emailVerificationChallenges EmailVerificationChallenge[]
+  mfaFactor                  MfaFactor?
+  mfaLoginChallenges         MfaLoginChallenge[]
+  securityEvents             SecurityEvent[]
+  collaborations             InviteCollaborator[] @relation("InviteCollaboratorUser")
+  accessRequests             InviteAccessRequest[] @relation("InviteAccessRequestRequester")
+  reviewedAccessRequests     InviteAccessRequest[] @relation("InviteAccessRequestDecider")
 }
 
 enum UserPlan {
@@ -49,6 +60,113 @@ model RefreshToken {
   @@index([expiresAt])
 }
 
+model PasswordResetChallenge {
+  id           String   @id @default(cuid())
+  userId       String
+  email        String
+  otpHash      String
+  expiresAt    DateTime
+  attemptCount Int      @default(0)
+  usedAt       DateTime?
+  requestedIp  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+  @@index([expiresAt])
+}
+
+model EmailVerificationChallenge {
+  id          String   @id @default(cuid())
+  userId       String
+  email        String
+  tokenHash    String   @unique
+  expiresAt    DateTime
+  usedAt       DateTime?
+  requestedIp  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+  @@index([expiresAt])
+}
+
+enum MfaFactorType {
+  totp
+}
+
+model MfaFactor {
+  id         String        @id @default(cuid())
+  type       MfaFactorType @default(totp)
+  secret     String
+  userId     String?       @unique
+  adminId    String?       @unique
+  verifiedAt DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  user          User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  admin         AdminUser?        @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  recoveryCodes MfaRecoveryCode[]
+}
+
+model MfaRecoveryCode {
+  id        String   @id @default(cuid())
+  factorId   String
+  codeHash   String
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  factor MfaFactor @relation(fields: [factorId], references: [id], onDelete: Cascade)
+
+  @@index([factorId])
+}
+
+model MfaLoginChallenge {
+  id         String   @id @default(cuid())
+  userId     String?
+  adminId    String?
+  expiresAt  DateTime
+  consumedAt DateTime?
+  requestedIp String?
+  createdAt  DateTime @default(now())
+
+  user  User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  admin AdminUser? @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
+model SecurityEvent {
+  id         String   @id @default(cuid())
+  userId     String?
+  adminId    String?
+  eventType  String
+  outcome    String
+  ipAddress  String?
+  userAgent  String?
+  requestId  String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  user  User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  admin AdminUser? @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([adminId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
 model AdminUser {
   id           String     @id @default(cuid())
   name         String
@@ -58,9 +176,12 @@ model AdminUser {
   createdAt    DateTime   @default(now())
   lastLoginAt  DateTime?
 
-  notes         AdminNote[]
-  announcements Announcement[]
-  auditLogs     AuditLog[]
+  notes            AdminNote[]
+  announcements    Announcement[]
+  auditLogs        AuditLog[]
+  mfaFactor        MfaFactor?
+  mfaLoginChallenges MfaLoginChallenge[]
+  securityEvents   SecurityEvent[]
 }
 
 enum AdminRole {
@@ -68,10 +189,16 @@ enum AdminRole {
   support
 }
 
+enum PackageCode {
+  package_a
+  package_b
+}
+
 model Template {
   slug             String         @id
   name             String
   category         EventCategory
+  packageCode      PackageCode    @default(package_a)
   tags             String[]
   isPremium        Boolean        @default(false)
   price            Int            @default(0)
@@ -105,9 +232,15 @@ model Invite {
   userId           String
   templateSlug     String
   templateCategory EventCategory
+  packageCode      PackageCode   @default(package_a)
+  eventManagementEnabled Boolean @default(true)
   slug             String        @unique
   status           InviteStatus  @default(draft)
   data             Json          @default("{}")
+  viewCount        Int           @default(0)
+  eventDate        DateTime?
+  expiryDate       DateTime?
+  validUntil       DateTime
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -115,10 +248,17 @@ model Invite {
   template Template @relation(fields: [templateSlug], references: [slug])
   rsvps    Rsvp[]
   notes    AdminNote[]
+  guests   InviteGuest[]
+  broadcasts InviteBroadcast[]
+  collaborators InviteCollaborator[]
+  accessRequests InviteAccessRequest[]
+  transactions Transaction[]
 
   @@index([userId])
   @@index([status])
   @@index([templateSlug])
+  @@index([packageCode])
+  @@index([validUntil])
 }
 
 enum InviteStatus {
@@ -131,17 +271,30 @@ enum InviteStatus {
 model Rsvp {
   id          String       @id @default(cuid())
   inviteId    String
+  guestId     String?
   invite      Invite       @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  guest       InviteGuest? @relation(fields: [guestId], references: [id], onDelete: SetNull)
   name        String
   email       String?
   response    RsvpResponse
   guestCount  Int          @default(1)
   message     String?
+  adultCount  Int?
+  childCount  Int?
+  mealChoice  String?
+  dietaryRestrictions String?
+  customAnswers Json?
+  stayNeeded  Boolean?
+  roomRequirement String?
+  transportNeeded Boolean?
+  transportMode String?
+  language    String?
   submittedAt DateTime     @default(now())
   ipAddress   String?
 
   @@index([inviteId])
   @@index([email])
+  @@index([guestId])
 }
 
 enum RsvpResponse {
@@ -150,27 +303,40 @@ enum RsvpResponse {
   maybe
 }
 
+enum TransactionKind {
+  initial_purchase
+  event_management_addon
+  renewal
+}
+
 model Transaction {
-  id                    String            @id @default(cuid())
-  userId                String
-  user                  User              @relation(fields: [userId], references: [id])
-  templateSlug          String
-  amount                Int
-  currency              String            @default("USD")
-  status                TransactionStatus @default(pending)
-  stripePaymentIntentId String?
-  stripeChargeId        String?
-  promoCode             String?
-  discountAmount        Int               @default(0)
-  refundedAt            DateTime?
-  refundReason          String?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id])
+  templateSlug      String
+  packageCode       PackageCode       @default(package_a)
+  kind              TransactionKind   @default(initial_purchase)
+  inviteId          String?
+  amount            Int
+  currency          String            @default("USD")
+  status            TransactionStatus @default(pending)
+  razorpayOrderId   String?           @unique
+  razorpayPaymentId String?
+  promoCode         String?
+  discountAmount    Int               @default(0)
+  refundedAt        DateTime?
+  refundReason      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  invite            Invite?           @relation(fields: [inviteId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([status])
-  @@index([stripePaymentIntentId])
+  @@index([razorpayOrderId])
   @@index([createdAt])
+  @@index([inviteId])
+  @@index([packageCode])
+  @@index([kind])
 }
 
 enum TransactionStatus {
@@ -258,4 +424,192 @@ enum EventCategory {
   baby_shower
   corporate
   anniversary
+}
+
+enum GuestInvitationStatus {
+  invited
+  confirmed
+  waitlisted
+  cancelled
+}
+
+enum CollaboratorStatus {
+  pending
+  active
+  revoked
+}
+
+enum AccessRequestStatus {
+  pending
+  approved
+  rejected
+}
+
+enum BroadcastType {
+  venue_change
+  timing_update
+  rsvp_reminder
+  dress_code_reminder
+  weather_advisory
+  parking_update
+  photos_uploaded
+  post_event_thank_you
+  custom
+}
+
+enum BroadcastStatus {
+  draft
+  sent
+  partial
+}
+
+enum BroadcastRecipientStatus {
+  pending
+  sent
+  opened
+  bounced
+}
+
+model InviteGuest {
+  id                  String                 @id @default(cuid())
+  inviteId            String
+  token               String                 @unique @default(cuid())
+  name                String
+  email               String?
+  phone               String?
+  household           String?
+  audienceSegment     String                 @default("general")
+  tags                String[]               @default([])
+  language            String                 @default("en")
+  invitationStatus    GuestInvitationStatus  @default(invited)
+  response            RsvpResponse?
+  guestCount          Int                    @default(1)
+  adultCount          Int?
+  childCount          Int?
+  message             String?
+  mealChoice          String?
+  dietaryRestrictions String?
+  customAnswers       Json?
+  stayNeeded          Boolean                @default(false)
+  lodgingStatus       String?
+  hotelName           String?
+  roomType            String?
+  roomCount           Int                    @default(0)
+  checkInDate         DateTime?
+  checkOutDate        DateTime?
+  shuttleRequired     Boolean                @default(false)
+  transportMode       String?
+  arrivalDetails      String?
+  departureDetails    String?
+  parkingRequired     Boolean                @default(false)
+  supportNotes        String?
+  inviteSentAt        DateTime?
+  lastBroadcastAt     DateTime?
+  rsvpSubmittedAt     DateTime?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  invite              Invite                 @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  rsvps               Rsvp[]
+  broadcastRecipients BroadcastRecipient[]
+
+  @@index([inviteId])
+  @@index([email])
+  @@index([response])
+  @@index([audienceSegment])
+}
+
+model InviteCollaborator {
+  id              String             @id @default(cuid())
+  inviteId         String
+  userId          String?
+  email           String
+  name            String?
+  roleLabel       String             @default("collaborator")
+  permissions     String[]
+  status          CollaboratorStatus @default(pending)
+  invitedByUserId String
+  inviteToken     String             @unique @default(cuid())
+  invitedAt       DateTime           @default(now())
+  joinedAt        DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  invite          Invite             @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  user            User?              @relation("InviteCollaboratorUser", fields: [userId], references: [id], onDelete: SetNull)
+  accessRequests  InviteAccessRequest[]
+
+  @@unique([inviteId, email])
+  @@index([inviteId])
+  @@index([email])
+}
+
+model InviteAccessRequest {
+  id                      String              @id @default(cuid())
+  inviteId                String
+  requesterUserId         String
+  requesterCollaboratorId String
+  requestedPermissions    String[]
+  status                  AccessRequestStatus @default(pending)
+  decidedByUserId         String?
+  requestedAt             DateTime            @default(now())
+  decidedAt               DateTime?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  invite                 Invite             @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  requester             User               @relation("InviteAccessRequestRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  requesterCollaborator InviteCollaborator @relation(fields: [requesterCollaboratorId], references: [id], onDelete: Cascade)
+  decider               User?              @relation("InviteAccessRequestDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([inviteId])
+  @@index([requesterUserId])
+  @@index([requesterCollaboratorId])
+  @@index([status])
+}
+
+model InviteBroadcast {
+  id              String          @id @default(cuid())
+  inviteId         String
+  type            BroadcastType
+  title           String
+  subject         String?
+  message         String
+  language        String          @default("en")
+  audience        Json
+  status          BroadcastStatus @default(draft)
+  sentAt          DateTime?
+  createdByUserId String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  invite          Invite          @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  recipients      BroadcastRecipient[]
+
+  @@index([inviteId])
+  @@index([sentAt])
+}
+
+model BroadcastRecipient {
+  id           String                   @id @default(cuid())
+  broadcastId  String
+  guestId      String?
+  email        String
+  name         String?
+  language     String                   @default("en")
+  status       BroadcastRecipientStatus @default(pending)
+  openToken    String                   @unique @default(cuid())
+  sentAt       DateTime?
+  openedAt     DateTime?
+  bouncedAt    DateTime?
+  errorMessage String?
+  inviteUrl    String?
+  createdAt    DateTime                 @default(now())
+
+  broadcast    InviteBroadcast          @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  guest        InviteGuest?             @relation(fields: [guestId], references: [id], onDelete: SetNull)
+
+  @@index([broadcastId])
+  @@index([guestId])
+  @@index([status])
 }

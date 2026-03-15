@@ -12,12 +12,33 @@ import { useAdminAuth } from '../contexts/AdminAuthContext';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
+import { getPackageDisplayName } from '@/lib/packageCatalog';
 
 const viewLabels: Record<string, string> = {
   all: 'Every invite on the platform.',
   published: 'Published invites currently visible to guests.',
   draft: 'Draft invites that still need work before launch.',
+  'needs-renewal': 'Invites whose 3 month validity window has ended and now require renewal.',
   'taken-down': 'Invites removed from public access.',
+};
+
+const renderPackageBadge = (packageCode: AdminInvite['packageCode']) => (
+  <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-secondary-foreground">
+    {getPackageDisplayName(packageCode)}
+  </span>
+);
+
+const renderEntitlementBadge = (invite: AdminInvite) => {
+  if (invite.canRenew) {
+    return <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700">Renewal needed</span>;
+  }
+  if (invite.canUpgradeEventManagement) {
+    return <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">Add-on pending</span>;
+  }
+  if (invite.eventManagementEnabled) {
+    return <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Event tools live</span>;
+  }
+  return <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Invite only</span>;
 };
 
 const Invites: React.FC = () => {
@@ -39,6 +60,7 @@ const Invites: React.FC = () => {
   }, []);
 
   const visibleInvites = useMemo(() => {
+    if (currentView === 'needs-renewal') return invites.filter((invite) => invite.canRenew);
     if (currentView === 'published') return invites.filter((invite) => invite.status === 'published');
     if (currentView === 'draft') return invites.filter((invite) => invite.status === 'draft');
     if (currentView === 'taken-down') return invites.filter((invite) => invite.status === 'taken-down');
@@ -93,8 +115,30 @@ const Invites: React.FC = () => {
         </button>
       ),
     },
-    { key: 'templateName', label: 'Template', sortable: true },
+    {
+      key: 'templateName',
+      label: 'Template',
+      sortable: true,
+      render: (row) => (
+        <div className="space-y-1">
+          <div className="text-foreground">{row.templateName}</div>
+          {renderPackageBadge(row.packageCode)}
+        </div>
+      ),
+    },
     { key: 'templateCategory', label: 'Category', sortable: true },
+    {
+      key: 'eventManagementEnabled',
+      label: 'Entitlements',
+      render: (row) => (
+        <div className="space-y-1">
+          {renderEntitlementBadge(row)}
+          <div className="text-xs text-muted-foreground">
+            Valid until {row.validUntil ? format(new Date(row.validUntil), 'dd MMM yyyy') : 'not set'}
+          </div>
+        </div>
+      ),
+    },
     { key: 'status', label: 'Status', sortable: true, render: (row) => <StatusBadge status={row.status} /> },
     { key: 'slug', label: 'Slug', render: (row) => <span className="font-mono text-xs text-muted-foreground">/{row.slug}</span> },
     { key: 'rsvpCount', label: 'RSVPs', sortable: true },
@@ -156,7 +200,8 @@ const Invites: React.FC = () => {
   ];
 
   const filters: DataTableFilter[] = [
-    { key: 'status', label: 'Status', options: [{ label: 'Published', value: 'published' }, { label: 'Draft', value: 'draft' }, { label: 'Expired', value: 'expired' }, { label: 'Taken Down', value: 'taken-down' }] },
+    { key: 'status', label: 'Status', options: [{ label: 'Published', value: 'published' }, { label: 'Draft', value: 'draft' }, { label: 'Taken Down', value: 'taken-down' }] },
+    { key: 'packageCode', label: 'Package', options: [{ label: 'Package A', value: 'package_a' }, { label: 'Package B', value: 'package_b' }] },
     { key: 'templateCategory', label: 'Category', options: [{ label: 'Wedding', value: 'wedding' }, { label: 'Birthday', value: 'birthday' }, { label: 'Engagement', value: 'engagement' }, { label: 'Corporate', value: 'corporate' }, { label: 'Baby Shower', value: 'baby-shower' }, { label: 'Anniversary', value: 'anniversary' }] },
   ];
 
@@ -164,6 +209,7 @@ const Invites: React.FC = () => {
     { key: 'all', label: 'All' },
     { key: 'published', label: 'Published' },
     { key: 'draft', label: 'Drafts' },
+    { key: 'needs-renewal', label: 'Needs Renewal' },
     { key: 'taken-down', label: 'Taken Down' },
   ];
 

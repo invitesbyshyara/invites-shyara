@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronUp, Lock, X } from "lucide-react";
 import TemplateThumbnail from "@/components/TemplateThumbnail";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,9 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlatformStatus } from "@/contexts/PlatformStatusContext";
 import { api } from "@/services/api";
-import { TemplateConfig } from "@/types";
+import { CheckoutIntent, Invite, TemplateConfig } from "@/types";
 import { getTemplateRenderer } from "@/templates/registry";
+import { getCheckoutPrice, getPackageDisplayName, INVITE_VALIDITY_MONTHS } from "@/lib/packageCatalog";
 
 const PREVIEW_WIDTH = 390;
 const PREVIEW_HEIGHT = 640;
@@ -30,10 +31,12 @@ const loadRazorpayScript = () =>
 
 const Checkout = () => {
   const { slug = "" } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
   const { currency, symbol, formatPrice } = useCurrency();
   const { user, isAuthenticated, setPendingTemplateSlug } = useAuth();
   const { status, isLoading: platformLoading } = usePlatformStatus();
   const [template, setTemplate] = useState<TemplateConfig | null>(null);
+  const [invite, setInvite] = useState<Invite | null>(null);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -44,16 +47,21 @@ const Checkout = () => {
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; type: "percentage" | "flat"; value: number; label: string } | null>(null);
+  const checkoutIntent = (searchParams.get("intent") ?? "initial_purchase") as CheckoutIntent;
+  const inviteId = searchParams.get("inviteId") ?? undefined;
+  const isInitialPurchase = checkoutIntent === "initial_purchase";
 
   useEffect(() => {
     let mounted = true;
 
-    api.getTemplate(slug)
-      .then((result) => {
-        if (mounted) setTemplate(result);
-      })
-      .catch(() => {
-        if (mounted) setTemplate(null);
+    Promise.all([
+      api.getTemplate(slug).catch(() => null),
+      inviteId ? api.getInvite(inviteId).catch(() => null) : Promise.resolve(null),
+    ])
+      .then(([templateResult, inviteResult]) => {
+        if (!mounted) return;
+        setTemplate(templateResult);
+        setInvite(inviteResult);
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -62,7 +70,7 @@ const Checkout = () => {
     return () => {
       mounted = false;
     };
-  }, [slug]);
+  }, [inviteId, slug]);
 
   const TemplateRenderer = useMemo(
     () => (template ? getTemplateRenderer(template.category, template.slug) : null),
@@ -74,7 +82,8 @@ const Checkout = () => {
     [template],
   );
 
-  const basePrice = template ? (currency === "USD" ? template.priceUsd : template.priceEur) : 0;
+  const effectivePackageCode = invite?.packageCode ?? template?.packageCode ?? "package_a";
+  const basePrice = getCheckoutPrice(checkoutIntent, effectivePackageCode, currency);
   const discount = !appliedPromo
     ? 0
     : appliedPromo.type === "percentage"
@@ -125,11 +134,13 @@ const Checkout = () => {
     setPayError(null);
 
     try {
-      const order = await api.createCheckoutOrder(
-        template.slug,
-        currency.toLowerCase() as "usd" | "eur",
-        appliedPromo?.code,
-      );
+      const order = await api.createCheckoutOrder({
+        intent: checkoutIntent,
+        templateSlug: isInitialPurchase ? template.slug : undefined,
+        inviteId,
+        currency: currency.toLowerCase() as "usd" | "eur",
+        ...(isInitialPurchase && appliedPromo?.code ? { promoCode: appliedPromo.code } : {}),
+      });
 
       if (order.free) {
         window.location.assign(order.inviteId ? `/dashboard/invites/${order.inviteId}/edit` : "/dashboard");
@@ -155,6 +166,11 @@ const Checkout = () => {
               razorpayOrderId: response.razorpay_order_id,
               razorpaySignature: response.razorpay_signature,
             });
+            if (checkoutIntent === "event_management_addon") {
+              window.location.assign(`/dashboard/invites/${result.inviteId}/operations`);
+              return;
+            }
+
             window.location.assign(`/dashboard/invites/${result.inviteId}/edit`);
           } catch {
             setPayError("Payment verification failed. Please contact support if your amount was deducted.");
@@ -186,6 +202,31 @@ const Checkout = () => {
     );
   }
 
+  const checkoutTitle =
+    checkoutIntent === "event_management_addon"
+      ? "Unlock event management"
+      : checkoutIntent === "renewal"
+        ? "Renew invite access"
+        : "Complete your purchase";
+  const checkoutSubtitle =
+    checkoutIntent === "event_management_addon"
+      ? "Add RSVP, guest coordination, reminders, localization, and export tools to this invite."
+      : checkoutIntent === "renewal"
+        ? `Renew this invite for another ${INVITE_VALIDITY_MONTHS} months of access.`
+        : "Preview the design, review the package, and unlock personalization when you are ready.";
+  const orderLabel =
+    checkoutIntent === "event_management_addon"
+      ? "Event management add-on"
+      : checkoutIntent === "renewal"
+        ? "Invite renewal"
+        : `${getPackageDisplayName(effectivePackageCode)} template`;
+  const actionLabel =
+    checkoutIntent === "event_management_addon"
+      ? `Unlock for ${formatPrice(finalPrice)}`
+      : checkoutIntent === "renewal"
+        ? `Renew for ${formatPrice(finalPrice)}`
+        : `Pay ${formatPrice(finalPrice)}`;
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="border-b border-border bg-card/80 backdrop-blur-sm">
@@ -198,9 +239,9 @@ const Checkout = () => {
       <div className="container max-w-5xl py-12 px-4 grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-8">
           <div>
-            <h1 className="font-display text-3xl font-bold mb-3">Complete your purchase</h1>
+            <h1 className="font-display text-3xl font-bold mb-3">{checkoutTitle}</h1>
             <p className="text-muted-foreground font-body">
-              Preview the design, review the price, and unlock personalization when you are ready.
+              {checkoutSubtitle}
             </p>
           </div>
 
@@ -219,13 +260,24 @@ const Checkout = () => {
             </div>
             <div className="flex-1">
               <h2 className="font-display font-semibold text-lg">{template.name}</h2>
-              <p className="text-sm text-muted-foreground font-body capitalize mb-2">{template.category.replace("-", " ")}</p>
+              <p className="text-sm text-muted-foreground font-body capitalize mb-2">
+                {template.category.replace("-", " ")} · {getPackageDisplayName(effectivePackageCode)}
+              </p>
               <p className="text-2xl font-display font-bold text-gold">{formatPrice(basePrice)}</p>
-              <p className="text-sm text-muted-foreground font-body mt-2">Pay once. Personalize and publish after purchase.</p>
+              <p className="text-sm text-muted-foreground font-body mt-2">
+                {checkoutIntent === "event_management_addon"
+                  ? "Unlock the full RSVP and guest-management toolset for this Package B invite."
+                  : checkoutIntent === "renewal"
+                    ? `Restore another ${INVITE_VALIDITY_MONTHS} months of access for this invite.`
+                    : effectivePackageCode === "package_a"
+                      ? "Package A includes all invite and event-management features, with 3 months validity."
+                      : "Package B starts with the invite only. Event management can be added later and every invite stays valid for 3 months."}
+              </p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          {isInitialPurchase && (
+            <div className="rounded-2xl border border-border bg-card overflow-hidden">
             <button onClick={() => setPreviewOpen((open) => !open)} className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-muted/30 transition-colors">
               <div>
                 <p className="font-display font-semibold">Personalize your preview</p>
@@ -267,23 +319,34 @@ const Checkout = () => {
                 </div>
               </div>
             )}
-          </div>
+            </div>
+          )}
 
           <div className="rounded-2xl border border-border bg-card p-6">
             <h3 className="font-display font-semibold mb-4">Before you pay</h3>
             <div className="grid gap-3 text-sm text-muted-foreground font-body">
-              <p>Use the studio preview or live sample to confirm the design fits your event.</p>
-              <p>After payment, the invite builder unlocks your personalized dashboard flow.</p>
-              <p>You can edit the invite later and guests will still use the same link.</p>
+              <p>Every invite stays active for {INVITE_VALIDITY_MONTHS} months before renewal is needed.</p>
+              <p>
+                {effectivePackageCode === "package_a"
+                  ? "Package A includes the full invite system from the start."
+                  : "Package B gives you the premium invite design first, then lets you add event management later if you need it."}
+              </p>
+              <p>
+                {checkoutIntent === "renewal"
+                  ? "Renewal extends the current invite window without changing the template or guest link."
+                  : "You can keep editing the same invite later and guests will still use the same link."}
+              </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 mt-5">
+            {isInitialPurchase && (
+              <div className="flex flex-col sm:flex-row gap-3 mt-5">
               <Button asChild variant="outline">
                 <Link to={`/templates/${template.slug}/preview`}>Studio Preview</Link>
               </Button>
               <Button asChild variant="outline">
                 <Link to={`/samples/${template.slug}`}>Live Sample</Link>
               </Button>
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -316,7 +379,11 @@ const Checkout = () => {
 
           <div className="p-6 rounded-2xl border border-border bg-card">
             <h3 className="font-display font-semibold mb-4">Promo code</h3>
-            {!appliedPromo ? (
+            {!isInitialPurchase ? (
+              <p className="text-sm text-muted-foreground font-body">
+                Promo codes apply only to first-time package purchases.
+              </p>
+            ) : !appliedPromo ? (
               <>
                 <button onClick={() => setPromoExpanded((open) => !open)} disabled={acquisitionLocked} className="flex items-center gap-1.5 text-sm font-body text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60">
                   Have a promo code?
@@ -352,7 +419,7 @@ const Checkout = () => {
           <div className="p-6 rounded-2xl border border-border bg-card">
             <h3 className="font-display font-semibold mb-4">Order summary</h3>
             <div className="flex justify-between font-body text-sm mb-2">
-              <span className="text-muted-foreground">{template.name} template</span>
+              <span className="text-muted-foreground">{orderLabel}</span>
               <span className={appliedPromo ? "line-through text-muted-foreground" : "font-medium"}>{formatPrice(basePrice)}</span>
             </div>
             {appliedPromo && (
@@ -371,14 +438,18 @@ const Checkout = () => {
               <span className="text-gold">{formatPrice(finalPrice)}</span>
             </div>
             <p className="text-xs text-muted-foreground font-body mt-4">
-              {acquisitionLocked ? "Payments are currently paused while we complete platform verification." : "Secure payment via Razorpay. Cards and UPI accepted."}
+              {acquisitionLocked
+                ? "Payments are currently paused while we complete platform verification."
+                : checkoutIntent === "renewal"
+                  ? "Renewal restores another access window without changing your guest link."
+                  : "Secure payment via Razorpay. Cards and UPI accepted."}
             </p>
           </div>
 
           {payError && <p className="text-sm text-destructive font-body text-center">{payError}</p>}
 
           <Button className="w-full h-12 font-display text-base" onClick={handlePay} disabled={!isAuthenticated || paying || acquisitionLocked}>
-            {acquisitionLocked ? "Purchases temporarily unavailable" : paying ? "Processing..." : isAuthenticated ? `Pay ${formatPrice(finalPrice)}` : "Sign in to unlock purchase"}
+            {acquisitionLocked ? "Purchases temporarily unavailable" : paying ? "Processing..." : isAuthenticated ? actionLabel : "Sign in to unlock purchase"}
           </Button>
         </aside>
       </div>

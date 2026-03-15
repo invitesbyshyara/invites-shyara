@@ -8,6 +8,7 @@ import {
   pickGuestLanguage,
   TECHNICAL_GUEST_COUNT_LIMIT,
 } from "../services/inviteOps";
+import { deriveInviteEntitlements } from "../services/packageEntitlements";
 import { sendRsvpConfirmationEmail, sendRsvpNotificationEmail } from "../services/email";
 import { getCustomerAcquisitionStatus } from "../services/customerAcquisitionLock";
 import { AppError, asyncHandler, sendSuccess } from "../utils/http";
@@ -18,6 +19,64 @@ const uniq = <T,>(values: T[]) => Array.from(new Set(values));
 
 const optionalText = (value: string | undefined) => {
   return sanitizeOptionalText(value, { maxLength: 1_000 });
+};
+
+const getInviteEntitlements = (invite: {
+  packageCode: "package_a" | "package_b";
+  eventManagementEnabled: boolean;
+  validUntil: Date;
+  status: "draft" | "published" | "expired" | "taken_down";
+}) => deriveInviteEntitlements({
+  packageCode: invite.packageCode,
+  eventManagementEnabled: invite.eventManagementEnabled,
+  validUntil: invite.validUntil,
+  status: invite.status,
+});
+
+const assertPublicInviteAccessible = (invite: {
+  packageCode: "package_a" | "package_b";
+  eventManagementEnabled: boolean;
+  validUntil: Date;
+  status: "draft" | "published" | "expired" | "taken_down";
+}) => {
+  const entitlements = getInviteEntitlements(invite);
+
+  if (invite.status === "taken_down") {
+    return entitlements;
+  }
+
+  if (entitlements.isExpired) {
+    return entitlements;
+  }
+
+  if (!entitlements.publicInviteAccessible) {
+    throw new AppError("Invite not found", 404);
+  }
+
+  return entitlements;
+};
+
+const assertRsvpAccessible = (invite: {
+  packageCode: "package_a" | "package_b";
+  eventManagementEnabled: boolean;
+  validUntil: Date;
+  status: "draft" | "published" | "expired" | "taken_down";
+}) => {
+  const entitlements = getInviteEntitlements(invite);
+
+  if (entitlements.isExpired) {
+    throw new AppError("Invite has expired and must be renewed before RSVP can continue", 410, {
+      code: "INVITE_EXPIRED",
+    });
+  }
+
+  if (!entitlements.eventManagementAccessible || invite.status !== "published") {
+    throw new AppError("RSVP is not available for this invite", 403, {
+      code: "EVENT_MANAGEMENT_LOCKED",
+    });
+  }
+
+  return entitlements;
 };
 
 const validatePartyCounts = ({
@@ -110,8 +169,34 @@ router.get(
       throw new AppError("Invite not found", 404);
     }
 
+    const entitlements = assertPublicInviteAccessible(invite);
+
     if (invite.status === "taken_down") {
-      return sendSuccess(res, { status: "taken_down" });
+      return sendSuccess(res, {
+        inviteId: invite.id,
+        templateSlug: invite.templateSlug,
+        templateCategory: invite.templateCategory,
+        packageCode: invite.packageCode,
+        eventManagementEnabled: invite.eventManagementEnabled,
+        validUntil: invite.validUntil,
+        canRenew: entitlements.canRenew,
+        canUpgradeEventManagement: entitlements.canUpgradeEventManagement,
+        status: "taken_down",
+      });
+    }
+
+    if (entitlements.isExpired) {
+      return sendSuccess(res, {
+        inviteId: invite.id,
+        templateSlug: invite.templateSlug,
+        templateCategory: invite.templateCategory,
+        packageCode: invite.packageCode,
+        eventManagementEnabled: invite.eventManagementEnabled,
+        validUntil: invite.validUntil,
+        canRenew: entitlements.canRenew,
+        canUpgradeEventManagement: entitlements.canUpgradeEventManagement,
+        status: "expired",
+      });
     }
 
     const inviteData = (invite.data ?? {}) as Record<string, unknown>;
@@ -130,9 +215,14 @@ router.get(
     return sendSuccess(res, {
       templateSlug: invite.templateSlug,
       templateCategory: invite.templateCategory,
+      packageCode: invite.packageCode,
       data: inviteData,
       inviteId: invite.id,
-      status: invite.status,
+      status: entitlements.effectiveStatus,
+      eventManagementEnabled: invite.eventManagementEnabled,
+      validUntil: invite.validUntil,
+      canRenew: entitlements.canRenew,
+      canUpgradeEventManagement: entitlements.canUpgradeEventManagement,
       selectedLanguage,
       languages: localization.enabledLanguages,
       viewer: viewer
@@ -154,7 +244,11 @@ router.post(
   "/invites/:slug/view",
   asyncHandler(async (req, res) => {
     await prisma.invite.updateMany({
-      where: { slug: req.params.slug, status: "published" },
+      where: {
+        slug: req.params.slug,
+        status: "published",
+        validUntil: { gt: new Date() },
+      },
       data: { viewCount: { increment: 1 } },
     });
     return sendSuccess(res, { ok: true });
@@ -169,12 +263,21 @@ router.get(
 
     const invite = await prisma.invite.findUnique({
       where: { id: params.inviteId },
-      select: { id: true, status: true, data: true },
+      select: {
+        id: true,
+        status: true,
+        data: true,
+        packageCode: true,
+        eventManagementEnabled: true,
+        validUntil: true,
+      },
     });
 
-    if (!invite || invite.status !== "published") {
+    if (!invite) {
       throw new AppError("Invite not found", 404);
     }
+
+    assertRsvpAccessible(invite);
 
     const inviteData = (invite.data ?? {}) as Record<string, unknown>;
     const viewer = query.guest
@@ -261,9 +364,11 @@ router.post(
       },
     });
 
-    if (!invite || invite.status !== "published") {
+    if (!invite) {
       throw new AppError("Invite not found", 404);
     }
+
+    assertRsvpAccessible(invite);
 
     const inviteData = (invite.data ?? {}) as Record<string, unknown>;
     const settings = normalizeRsvpSettings(inviteData);

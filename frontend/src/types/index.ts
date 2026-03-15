@@ -1,4 +1,7 @@
 export type EventCategory = 'wedding' | 'engagement' | 'birthday' | 'baby-shower' | 'corporate' | 'anniversary';
+export type Currency = 'USD' | 'EUR';
+export type PackageCode = 'package_a' | 'package_b';
+export type CheckoutIntent = 'initial_purchase' | 'event_management_addon' | 'renewal';
 
 export type TemplateFieldType = 'text' | 'textarea' | 'date' | 'time' | 'image' | 'images' | 'toggle' | 'schedule-list' | 'number' | 'url';
 
@@ -17,6 +20,7 @@ export interface TemplateConfig {
   slug: string;
   name: string;
   category: EventCategory;
+  packageCode: PackageCode;
   tags: string[];
   isPremium: boolean;
   price: number;
@@ -36,6 +40,11 @@ export interface Invite {
   userId: string;
   templateSlug: string;
   templateCategory: EventCategory;
+  packageCode: PackageCode;
+  eventManagementEnabled: boolean;
+  validUntil: string;
+  canRenew: boolean;
+  canUpgradeEventManagement: boolean;
   slug: string;
   status: InviteStatus;
   data: Record<string, any>;
@@ -116,9 +125,14 @@ export interface InviteViewer {
 export interface PublicInviteData {
   templateSlug: string;
   templateCategory: EventCategory;
+  packageCode: PackageCode;
   data: Record<string, any>;
   inviteId: string;
   status?: InviteStatus;
+  eventManagementEnabled: boolean;
+  validUntil?: string;
+  canRenew?: boolean;
+  canUpgradeEventManagement?: boolean;
   selectedLanguage?: string;
   languages?: string[];
   viewer?: InviteViewer;
@@ -344,6 +358,11 @@ export interface InviteWorkspace {
     slug: string;
     status: InviteStatus;
     templateSlug: string;
+    packageCode: PackageCode;
+    eventManagementEnabled: boolean;
+    validUntil: string;
+    canRenew: boolean;
+    canUpgradeEventManagement: boolean;
   };
   availableLanguages: string[];
   defaultLanguage: string;

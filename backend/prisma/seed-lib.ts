@@ -3,6 +3,7 @@ import {
   AdminRole,
   DiscountType,
   EventCategory,
+  PackageCode,
   PrismaClient,
 } from "@prisma/client";
 
@@ -10,6 +11,7 @@ type SeedTemplate = {
   slug: string;
   name: string;
   category: EventCategory;
+  packageCode: PackageCode;
   isPremium: boolean;
   price: number;
   priceUsd: number;
@@ -36,7 +38,26 @@ export const DEFAULT_TEST_USER_PASSWORD = "ShyaraTest@2024";
 export const TEST_USER_EMAIL = "test@invitesbyshyara.com";
 
 const templates: SeedTemplate[] = [
-  { slug: "rustic-charm", name: "Rustic Charm", category: EventCategory.wedding, isPremium: true, price: 400, priceUsd: 400, priceEur: 500 },
+  {
+    slug: "rustic-charm",
+    name: "Rustic Charm",
+    category: EventCategory.wedding,
+    packageCode: PackageCode.package_a,
+    isPremium: true,
+    price: 14_900,
+    priceUsd: 14_900,
+    priceEur: 16_900,
+  },
+  {
+    slug: "rustic-signature",
+    name: "Rustic Signature",
+    category: EventCategory.wedding,
+    packageCode: PackageCode.package_b,
+    isPremium: true,
+    price: 9_900,
+    priceUsd: 9_900,
+    priceEur: 11_900,
+  },
 ];
 
 const categories: SeedCategory[] = [
@@ -107,7 +128,7 @@ export async function seedCore(prisma: PrismaClient) {
       where: { slug: template.slug },
       create: {
         ...template,
-        tags: [template.category, template.isPremium ? "premium" : "free"],
+        tags: [template.category, template.packageCode, template.isPremium ? "premium" : "free"],
         isVisible: true,
         isFeatured: true,
         sortOrder: index + 1,
@@ -115,11 +136,12 @@ export async function seedCore(prisma: PrismaClient) {
       update: {
         name: template.name,
         category: template.category,
+        packageCode: template.packageCode,
         isPremium: template.isPremium,
         price: template.price,
         priceUsd: template.priceUsd,
         priceEur: template.priceEur,
-        tags: [template.category, template.isPremium ? "premium" : "free"],
+        tags: [template.category, template.packageCode, template.isPremium ? "premium" : "free"],
         isVisible: true,
         isFeatured: true,
         sortOrder: index + 1,

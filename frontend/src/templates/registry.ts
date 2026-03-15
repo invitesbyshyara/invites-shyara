@@ -3,9 +3,11 @@ import { TemplateConfig, EventCategory } from '@/types';
 
 // Static config imports (small data files, safe to bundle)
 import rusticCharm from './wedding/rustic-charm/config';
+import rusticSignature from './wedding/rustic-signature/config';
 
 export const allTemplates: TemplateConfig[] = [
   rusticCharm,
+  rusticSignature,
 ];
 
 export const getTemplateBySlug = (slug: string): TemplateConfig | undefined =>

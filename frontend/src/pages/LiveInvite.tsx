@@ -60,6 +60,7 @@ const LiveInvite = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [takenDown, setTakenDown] = useState(false);
+  const [expired, setExpired] = useState(false);
   const [musicMuted, setMusicMuted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const interactedRef = useRef(false);
@@ -73,12 +74,18 @@ const LiveInvite = () => {
     setLoading(true);
     setError(false);
     setTakenDown(false);
+    setExpired(false);
 
     api.getPublicInvite(slug, { guestToken, language: requestedLanguage })
       .then((data) => {
         if (!mounted) return;
         if (data.status === "taken-down") {
           setTakenDown(true);
+          return;
+        }
+        if (data.status === "expired") {
+          setExpired(true);
+          setInviteData(data);
           return;
         }
         setInviteData(data);
@@ -136,6 +143,17 @@ const LiveInvite = () => {
 
   if (takenDown) {
     return <SimpleState title={requestedCopy.invitationRemovedTitle} description={requestedCopy.invitationRemovedDescription} ctaLabel={requestedCopy.visitShyara} footerLabel={requestedCopy.poweredBy} />;
+  }
+
+  if (expired) {
+    return (
+      <SimpleState
+        title="Invitation expired"
+        description="This invitation has passed its 3 month validity window and needs renewal before guests can open it again."
+        ctaLabel={requestedCopy.visitShyara}
+        footerLabel={requestedCopy.poweredBy}
+      />
+    );
   }
 
   if (error || !inviteData) {
@@ -203,7 +221,12 @@ const LiveInvite = () => {
       )}
 
       <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-        <TemplateRenderer config={effectiveConfig} data={{ ...data, slug }} inviteId={postEventMode ? undefined : inviteData.inviteId} language={selectedLanguage} />
+        <TemplateRenderer
+          config={effectiveConfig}
+          data={{ ...data, slug }}
+          inviteId={postEventMode || !inviteData.eventManagementEnabled ? undefined : inviteData.inviteId}
+          language={selectedLanguage}
+        />
       </Suspense>
 
       {videoUrl && (

@@ -14,12 +14,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
+import { getPackageDisplayName } from '@/lib/packageCatalog';
 
 const viewLabels: Record<string, string> = {
   all: 'All transaction activity.',
+  renewals: 'Renewal payments that restore expired invites.',
+  addons: 'Package B event-management add-on purchases.',
   failed: 'Failed payments that need operator review.',
   refunded: 'Transactions refunded by the support team.',
-  'high-value': 'High-value orders worth monitoring closely.',
 };
 
 const Transactions: React.FC = () => {
@@ -45,20 +47,55 @@ const Transactions: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const fmt = (cents: number) => `${currencySymbol}${(cents / 100).toFixed(2)}`;
+  const fmt = (cents: number, currency?: string) => {
+    const symbol = CURRENCY_SYMBOLS[(currency?.toUpperCase() as keyof typeof CURRENCY_SYMBOLS) ?? 'USD'] ?? currencySymbol;
+    return `${symbol}${(cents / 100).toFixed(2)}`;
+  };
+
+  const sumByCurrency = (items: AdminTransaction[]) =>
+    items.reduce<Record<string, number>>((totals, item) => {
+      const currency = (item.currency || 'USD').toUpperCase();
+      totals[currency] = (totals[currency] ?? 0) + item.amount;
+      return totals;
+    }, {});
+
+  const subtractCurrencyTotals = (left: Record<string, number>, right: Record<string, number>) => {
+    const currencies = new Set([...Object.keys(left), ...Object.keys(right)]);
+    return Array.from(currencies).reduce<Record<string, number>>((totals, currency) => {
+      totals[currency] = (left[currency] ?? 0) - (right[currency] ?? 0);
+      return totals;
+    }, {});
+  };
+
+  const formatCurrencyBreakdown = (totals: Record<string, number>) => {
+    const entries = Object.entries(totals).filter(([, amount]) => amount !== 0);
+    if (entries.length === 0) {
+      return fmt(0, 'USD');
+    }
+    return entries
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([currency, amount]) => fmt(amount, currency))
+      .join(' + ');
+  };
 
   const visibleTransactions = useMemo(() => {
+    if (currentView === 'renewals') return transactions.filter((transaction) => transaction.kind === 'renewal');
+    if (currentView === 'addons') return transactions.filter((transaction) => transaction.kind === 'event_management_addon');
     if (currentView === 'failed') return transactions.filter((transaction) => transaction.status === 'failed');
     if (currentView === 'refunded') return transactions.filter((transaction) => transaction.status === 'refunded');
-    if (currentView === 'high-value') return transactions.filter((transaction) => transaction.amount >= 20000);
     return transactions;
   }, [currentView, transactions]);
 
   const successTransactions = visibleTransactions.filter((transaction) => transaction.status === 'success');
-  const totalRevenue = successTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
-  const totalRefunds = visibleTransactions
+  const revenueTotals = sumByCurrency(successTransactions);
+  const refundTotals = visibleTransactions
     .filter((transaction) => transaction.status === 'refunded')
-    .reduce((sum, transaction) => sum + (transaction.refundAmount || 0), 0);
+    .reduce<Record<string, number>>((totals, transaction) => {
+      const currency = (transaction.currency || 'USD').toUpperCase();
+      totals[currency] = (totals[currency] ?? 0) + (transaction.refundAmount || 0);
+      return totals;
+    }, {});
+  const netTotals = subtractCurrencyTotals(revenueTotals, refundTotals);
 
   const handleRefund = async () => {
     if (!refundTarget) return;
@@ -78,7 +115,7 @@ const Transactions: React.FC = () => {
         )
       );
       setRefundTarget(null);
-      toast({ title: `Refund of ${fmt(amount)} issued` });
+      toast({ title: `Refund of ${fmt(amount, refundTarget.currency)} issued` });
     } catch {
       toast({ title: 'Refund failed', variant: 'destructive' });
     }
@@ -106,8 +143,38 @@ const Transactions: React.FC = () => {
         </button>
       ),
     },
-    { key: 'templateName', label: 'Template', sortable: true },
-    { key: 'amount', label: 'Amount', sortable: true, render: (row) => fmt(row.amount) },
+    {
+      key: 'templateName',
+      label: 'Template',
+      sortable: true,
+      render: (row) => (
+        <div className="space-y-1">
+          <div className="text-foreground">{row.templateName}</div>
+          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{getPackageDisplayName(row.packageCode)}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'kind',
+      label: 'Kind',
+      sortable: true,
+      render: (row) => <span className="text-xs uppercase text-muted-foreground">{row.kind.replace(/_/g, ' ')}</span>,
+    },
+    {
+      key: 'inviteSlug',
+      label: 'Invite',
+      render: (row) => (
+        <div className="space-y-1">
+          <div className="font-mono text-xs text-muted-foreground">{row.inviteSlug ? `/${row.inviteSlug}` : '—'}</div>
+          {row.inviteValidUntil && (
+            <div className="text-xs text-muted-foreground">
+              Valid until {format(new Date(row.inviteValidUntil), 'dd MMM yyyy')}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    { key: 'amount', label: 'Amount', sortable: true, render: (row) => fmt(row.amount, row.currency) },
     { key: 'date', label: 'Date', sortable: true, render: (row) => format(new Date(row.date), 'dd MMM yyyy') },
     { key: 'status', label: 'Status', sortable: true, render: (row) => <StatusBadge status={row.status} /> },
     {
@@ -143,13 +210,31 @@ const Transactions: React.FC = () => {
         { label: 'Refunded', value: 'refunded' },
       ],
     },
+    {
+      key: 'kind',
+      label: 'Kind',
+      options: [
+        { label: 'Initial purchase', value: 'initial_purchase' },
+        { label: 'Event add-on', value: 'event_management_addon' },
+        { label: 'Renewal', value: 'renewal' },
+      ],
+    },
+    {
+      key: 'packageCode',
+      label: 'Package',
+      options: [
+        { label: 'Package A', value: 'package_a' },
+        { label: 'Package B', value: 'package_b' },
+      ],
+    },
   ];
 
   const views = [
     { key: 'all', label: 'All' },
+    { key: 'renewals', label: 'Renewals' },
+    { key: 'addons', label: 'Add-ons' },
     { key: 'failed', label: 'Failed' },
     { key: 'refunded', label: 'Refunded' },
-    { key: 'high-value', label: 'High Value' },
   ];
 
   return (
@@ -162,15 +247,15 @@ const Transactions: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <div className="border border-border rounded-2xl p-4 bg-card">
           <p className="text-xs text-muted-foreground">Visible revenue</p>
-          <p className="text-xl font-bold text-emerald-600">{fmt(totalRevenue)}</p>
+          <p className="text-xl font-bold text-emerald-600">{formatCurrencyBreakdown(revenueTotals)}</p>
         </div>
         <div className="border border-border rounded-2xl p-4 bg-card">
           <p className="text-xs text-muted-foreground">Visible refunds</p>
-          <p className="text-xl font-bold text-orange-500">{fmt(totalRefunds)}</p>
+          <p className="text-xl font-bold text-orange-500">{formatCurrencyBreakdown(refundTotals)}</p>
         </div>
         <div className="border border-border rounded-2xl p-4 bg-card">
           <p className="text-xs text-muted-foreground">Net</p>
-          <p className="text-xl font-bold text-foreground">{fmt(totalRevenue - totalRefunds)}</p>
+          <p className="text-xl font-bold text-foreground">{formatCurrencyBreakdown(netTotals)}</p>
         </div>
       </div>
 
@@ -208,7 +293,7 @@ const Transactions: React.FC = () => {
         onOpenChange={() => setRefundTarget(null)}
         title="Issue Refund"
         description={`Refunding ${refundTarget?.customerName} for ${refundTarget?.templateName}`}
-        confirmLabel={`Refund ${refundTarget ? fmt(refundType === 'full' ? refundTarget.amount : refundAmount) : ''}`}
+        confirmLabel={`Refund ${refundTarget ? fmt(refundType === 'full' ? refundTarget.amount : refundAmount, refundTarget.currency) : ''}`}
         destructive
         onConfirm={handleRefund}
       >
@@ -222,7 +307,7 @@ const Transactions: React.FC = () => {
             >
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="full" />
-                <Label>Full ({refundTarget ? fmt(refundTarget.amount) : ''})</Label>
+                <Label>Full ({refundTarget ? fmt(refundTarget.amount, refundTarget.currency) : ''})</Label>
               </div>
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="partial" />

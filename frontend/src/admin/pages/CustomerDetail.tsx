@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { Ban, CheckCircle, KeyRound, Mail, Eye, FileText, CreditCard, Clock, MessageSquare, MoreHorizontal, Copy, DollarSign } from 'lucide-react';
+import { getPackageDisplayName } from '@/lib/packageCatalog';
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -69,7 +70,7 @@ const CustomerDetail: React.FC = () => {
   };
 
   const fmt = (cents: number, currency?: string) => {
-    const symbol = currencySymbol;
+    const symbol = CURRENCY_SYMBOLS[(currency?.toUpperCase() as keyof typeof CURRENCY_SYMBOLS) ?? 'USD'] ?? currencySymbol;
     return `${symbol}${(cents / 100).toFixed(2)}`;
   };
 
@@ -80,6 +81,8 @@ const CustomerDetail: React.FC = () => {
   );
 
   if (!customer) return null;
+
+  const invitesNeedingRenewal = invites.filter((invite) => invite.canRenew).length;
 
   return (
     <AdminLayout breadcrumbs={[{ label: 'Customers', to: '/admin/customers' }, { label: customer.name }]}>
@@ -94,7 +97,9 @@ const CustomerDetail: React.FC = () => {
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h2 className="text-lg font-semibold text-card-foreground">{customer.name}</h2>
               <StatusBadge status={customer.status} />
-              <StatusBadge status={customer.plan} />
+              <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+                {customer.plan === 'premium' ? 'Purchased' : 'Browsing only'}
+              </span>
             </div>
             <div className="flex items-center gap-1 text-sm text-muted-foreground">
               <span>{customer.email}</span>
@@ -151,6 +156,11 @@ const CustomerDetail: React.FC = () => {
             <span className="font-semibold text-foreground">{customer.totalInvites}</span>
             <span className="text-muted-foreground text-xs">invite{customer.totalInvites !== 1 ? 's' : ''}</span>
           </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted text-sm">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="font-semibold text-foreground">{invitesNeedingRenewal}</span>
+            <span className="text-muted-foreground text-xs">need renewal</span>
+          </div>
         </div>
       </div>
 
@@ -170,12 +180,25 @@ const CustomerDetail: React.FC = () => {
             <div className="border border-border rounded-lg overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-border bg-muted/50 text-xs text-muted-foreground">
-                  <th className="text-left px-3 py-2">Event</th><th className="text-left px-3 py-2">Template</th><th className="text-left px-3 py-2">Status</th><th className="text-left px-3 py-2">Slug</th><th className="text-left px-3 py-2">RSVPs</th><th className="text-left px-3 py-2">Created</th>
+                  <th className="text-left px-3 py-2">Event</th><th className="text-left px-3 py-2">Template</th><th className="text-left px-3 py-2">Entitlements</th><th className="text-left px-3 py-2">Status</th><th className="text-left px-3 py-2">Slug</th><th className="text-left px-3 py-2">RSVPs</th><th className="text-left px-3 py-2">Created</th>
                 </tr></thead>
                 <tbody>{invites.map(inv => (
                   <tr key={inv.id} className="border-b border-border last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/admin/invites/${inv.id}`)}>
                     <td className="px-3 py-2 text-foreground font-medium">{inv.eventName}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{inv.templateName}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      <div>{inv.templateName}</div>
+                      <div className="text-xs uppercase tracking-[0.14em]">{getPackageDisplayName(inv.packageCode)}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="space-y-1">
+                        <div className="text-foreground text-xs">
+                          {inv.canRenew ? 'Renewal needed' : inv.canUpgradeEventManagement ? 'Add-on available' : inv.eventManagementEnabled ? 'Event tools live' : 'Invite only'}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Valid until {inv.validUntil ? format(new Date(inv.validUntil), 'dd MMM yyyy') : 'not set'}
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-3 py-2"><StatusBadge status={inv.status} /></td>
                     <td className="px-3 py-2 text-muted-foreground font-mono text-xs">/{inv.slug}</td>
                     <td className="px-3 py-2 text-foreground">{inv.rsvpCount}</td>
@@ -194,12 +217,17 @@ const CustomerDetail: React.FC = () => {
             <div className="border border-border rounded-lg overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-border bg-muted/50 text-xs text-muted-foreground">
-                  <th className="text-left px-3 py-2">Template</th><th className="text-left px-3 py-2">Amount</th><th className="text-left px-3 py-2">Date</th><th className="text-left px-3 py-2">Status</th><th className="px-3 py-2"></th>
+                  <th className="text-left px-3 py-2">Template</th><th className="text-left px-3 py-2">Type</th><th className="text-left px-3 py-2">Amount</th><th className="text-left px-3 py-2">Invite</th><th className="text-left px-3 py-2">Date</th><th className="text-left px-3 py-2">Status</th><th className="px-3 py-2"></th>
                 </tr></thead>
                 <tbody>{transactions.map(txn => (
                   <tr key={txn.id} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2 text-foreground">{txn.templateName}</td>
+                    <td className="px-3 py-2 text-foreground">
+                      <div>{txn.templateName}</div>
+                      <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{getPackageDisplayName(txn.packageCode)}</div>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground uppercase text-xs">{txn.kind.replace(/_/g, ' ')}</td>
                     <td className="px-3 py-2 text-foreground">{fmt(txn.amount, txn.currency)}</td>
+                    <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{txn.inviteSlug ? `/${txn.inviteSlug}` : '—'}</td>
                     <td className="px-3 py-2 text-muted-foreground">{format(new Date(txn.date), 'dd MMM yyyy')}</td>
                     <td className="px-3 py-2"><StatusBadge status={txn.status} /></td>
                     <td className="px-3 py-2">{txn.status === 'success' && hasPermission('refund') && (

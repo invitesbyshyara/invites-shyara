@@ -1,5 +1,6 @@
 import {
   BroadcastAudience,
+  CheckoutIntent,
   CollaboratorPermission,
   EventCategory,
   Invite,
@@ -11,6 +12,7 @@ import {
   InviteWorkspace,
   LocalizationSettings,
   OperationsSummary,
+  PackageCode,
   PublicInviteData,
   Rsvp,
   RsvpSettings,
@@ -186,6 +188,7 @@ const mergeTemplate = (raw: {
   slug: string;
   name: string;
   category: string;
+  packageCode?: PackageCode;
   tags: string[];
   isPremium: boolean;
   price: number;
@@ -198,6 +201,7 @@ const mergeTemplate = (raw: {
       ...base,
       name: raw.name,
       category: toCategory(raw.category),
+      packageCode: raw.packageCode ?? base.packageCode,
       tags: raw.tags,
       isPremium: raw.isPremium,
       price: raw.price,
@@ -210,6 +214,7 @@ const mergeTemplate = (raw: {
     slug: raw.slug,
     name: raw.name,
     category: toCategory(raw.category),
+    packageCode: raw.packageCode ?? 'package_a',
     tags: raw.tags,
     isPremium: raw.isPremium,
     price: raw.price,
@@ -229,6 +234,11 @@ const mapInvite = (raw: {
   userId: string;
   templateSlug: string;
   templateCategory: string;
+  packageCode?: PackageCode;
+  eventManagementEnabled?: boolean;
+  validUntil?: string;
+  canRenew?: boolean;
+  canUpgradeEventManagement?: boolean;
   slug: string;
   status: string;
   data: Record<string, unknown>;
@@ -242,6 +252,11 @@ const mapInvite = (raw: {
   userId: raw.userId,
   templateSlug: raw.templateSlug,
   templateCategory: toCategory(raw.templateCategory),
+  packageCode: raw.packageCode ?? 'package_a',
+  eventManagementEnabled: raw.eventManagementEnabled ?? true,
+  validUntil: raw.validUntil ?? "",
+  canRenew: raw.canRenew ?? false,
+  canUpgradeEventManagement: raw.canUpgradeEventManagement ?? false,
   slug: raw.slug,
   status: normalizeStatus(raw.status),
   data: raw.data ?? {},
@@ -303,6 +318,7 @@ export const api = {
         slug: string;
         name: string;
         category: string;
+        packageCode?: PackageCode;
         tags: string[];
         isPremium: boolean;
         price: number;
@@ -321,6 +337,7 @@ export const api = {
       slug: string;
       name: string;
       category: string;
+      packageCode?: PackageCode;
       tags: string[];
       isPremium: boolean;
       price: number;
@@ -337,6 +354,11 @@ export const api = {
         userId: string;
         templateSlug: string;
         templateCategory: string;
+        packageCode?: PackageCode;
+        eventManagementEnabled?: boolean;
+        validUntil?: string;
+        canRenew?: boolean;
+        canUpgradeEventManagement?: boolean;
         slug: string;
         status: string;
         data: Record<string, unknown>;
@@ -356,6 +378,11 @@ export const api = {
       userId: string;
       templateSlug: string;
       templateCategory: string;
+      packageCode?: PackageCode;
+      eventManagementEnabled?: boolean;
+      validUntil?: string;
+      canRenew?: boolean;
+      canUpgradeEventManagement?: boolean;
       slug: string;
       status: string;
       data: Record<string, unknown>;
@@ -379,6 +406,11 @@ export const api = {
       userId: string;
       templateSlug: string;
       templateCategory: string;
+      packageCode?: PackageCode;
+      eventManagementEnabled?: boolean;
+      validUntil?: string;
+      canRenew?: boolean;
+      canUpgradeEventManagement?: boolean;
       slug: string;
       status: string;
       data: Record<string, unknown>;
@@ -414,6 +446,11 @@ export const api = {
       userId: string;
       templateSlug: string;
       templateCategory: string;
+      packageCode?: PackageCode;
+      eventManagementEnabled?: boolean;
+      validUntil?: string;
+      canRenew?: boolean;
+      canUpgradeEventManagement?: boolean;
       slug: string;
       status: string;
       data: Record<string, unknown>;
@@ -444,9 +481,14 @@ export const api = {
     const data = await request<{
       templateSlug?: string;
       templateCategory?: string;
+      packageCode?: PackageCode;
       data?: Record<string, unknown>;
       inviteId?: string;
       status?: string;
+      eventManagementEnabled?: boolean;
+      validUntil?: string;
+      canRenew?: boolean;
+      canUpgradeEventManagement?: boolean;
       selectedLanguage?: string;
       languages?: string[];
       viewer?: PublicInviteData["viewer"];
@@ -459,9 +501,14 @@ export const api = {
     return {
       templateSlug: data.templateSlug ?? "",
       templateCategory: toCategory(data.templateCategory ?? "wedding"),
+      packageCode: data.packageCode ?? 'package_a',
       data: (data.data ?? {}) as Record<string, unknown>,
       inviteId: data.inviteId ?? "",
       status: data.status ? normalizeStatus(data.status) : undefined,
+      eventManagementEnabled: data.eventManagementEnabled ?? true,
+      validUntil: data.validUntil,
+      canRenew: data.canRenew,
+      canUpgradeEventManagement: data.canUpgradeEventManagement,
       selectedLanguage: data.selectedLanguage,
       languages: data.languages ?? [],
       viewer: data.viewer,
@@ -915,12 +962,18 @@ export const api = {
       true,
     ),
 
-  createCheckoutOrder: async (templateSlug: string, currency: "usd" | "eur", promoCode?: string) => {
+  createCheckoutOrder: async (input: {
+    intent: CheckoutIntent;
+    currency: "usd" | "eur";
+    templateSlug?: string;
+    inviteId?: string;
+    promoCode?: string;
+  }) => {
     return request<CheckoutOrderResponse>(
       "/checkout/create-order",
       {
         method: "POST",
-        body: JSON.stringify({ templateSlug, currency, ...(promoCode ? { promoCode } : {}) }),
+        body: JSON.stringify(input),
       },
       true,
     );

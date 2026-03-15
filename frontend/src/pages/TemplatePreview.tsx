@@ -10,6 +10,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { TemplateConfig } from "@/types";
 import { getTemplateRenderer } from "@/templates/registry";
 import { formatSectionLabel } from "@/utils/invite";
+import { getPackageDisplayName } from "@/lib/packageCatalog";
 
 type PreviewMode = "mobile" | "desktop";
 
@@ -78,7 +79,9 @@ const TemplatePreview = () => {
             </button>
             <div className="min-w-0">
               <h1 className="font-display font-semibold text-sm truncate">{template.name}</h1>
-              <p className="text-xs text-muted-foreground capitalize">{template.category.replace("-", " ")} • {formatPrice(price)}</p>
+              <p className="text-xs text-muted-foreground capitalize">
+                {template.category.replace("-", " ")} • {getPackageDisplayName(template.packageCode)} • {formatPrice(price)}
+              </p>
             </div>
           </div>
 
@@ -93,7 +96,7 @@ const TemplatePreview = () => {
             </button>
           </div>
 
-          <PurchaseCtaButton slug={slug} openLabel="Buy & Customize" lockedLabel="Purchases paused" size="sm" className="text-xs shrink-0" />
+          <PurchaseCtaButton slug={slug} openLabel={template.packageCode === "package_a" ? "Choose Package A" : "Choose Package B"} lockedLabel="Purchases paused" size="sm" className="text-xs shrink-0" />
         </div>
       </div>
 
@@ -133,9 +136,9 @@ const TemplatePreview = () => {
             <h2 className="font-display text-lg font-semibold mb-3">What happens next</h2>
             <div className="space-y-3 text-sm text-muted-foreground font-body">
               <p>1. Preview the design and compare it with the live sample.</p>
-              <p>2. Purchase the template when you are ready to personalize it.</p>
-              <p>3. Fill in your names, venue, photos, schedule, RSVP setup, and guest settings in the dashboard.</p>
-              <p>4. Publish your invite, share one polished link, and manage reminders and guest coordination from the same workspace.</p>
+              <p>2. Choose the package that matches this design direction.</p>
+              <p>3. Personalize the invite in the dashboard and publish one polished guest link.</p>
+              <p>4. Package A includes full event tools immediately; Package B can add them later if you need them.</p>
             </div>
           </div>
 
@@ -149,11 +152,11 @@ const TemplatePreview = () => {
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-5">
-            <h2 className="font-display text-lg font-semibold mb-3">Included after purchase</h2>
+            <h2 className="font-display text-lg font-semibold mb-3">Package details</h2>
             <div className="space-y-3 text-sm text-muted-foreground font-body">
-              <p>Custom RSVP questions, guest limits, meal and dietary tracking.</p>
-              <p>Targeted reminders for venue, timing, dress code, parking, weather, and more.</p>
-              <p>Guest travel and stay management, collaborator permissions, multilingual guest experience, and ops exports.</p>
+              <p>Every invite stays valid for 3 months before renewal is needed.</p>
+              <p>{template.packageCode === "package_a" ? "This package includes RSVP, reminders, guest operations, localization, and exports from day one." : "This package starts with the invite only and lets you unlock RSVP and event-management tools later."}</p>
+              <p>{template.packageCode === "package_a" ? "Design direction: less premium, full-featured." : "Design direction: more premium, invite-first."}</p>
             </div>
           </div>
 
@@ -166,7 +169,7 @@ const TemplatePreview = () => {
               <Button asChild variant="outline" className="justify-start">
                 <Link to="/pricing">View Pricing</Link>
               </Button>
-              <PurchaseCtaButton slug={template.slug} openLabel="Buy & Customize" lockedLabel="Purchases paused" className="justify-start" />
+              <PurchaseCtaButton slug={template.slug} openLabel={template.packageCode === "package_a" ? "Choose Package A" : "Choose Package B"} lockedLabel="Purchases paused" className="justify-start" />
             </div>
           </div>
         </aside>

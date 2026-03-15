@@ -8,7 +8,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 
 const ALL_SECTIONS = ["hero", "story", "schedule", "gallery", "venue", "rsvp"];
@@ -19,10 +18,10 @@ const AddTemplate: React.FC = () => {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [category, setCategory] = useState("wedding");
+  const [packageCode, setPackageCode] = useState<"package_a" | "package_b">("package_a");
   const [tags, setTags] = useState("");
-  const [priceUsd, setPriceUsd] = useState(499);
-  const [priceEur, setPriceEur] = useState(449);
-  const [isFree, setIsFree] = useState(false);
+  const [priceUsd, setPriceUsd] = useState(14900);
+  const [priceEur, setPriceEur] = useState(16900);
   const [sections, setSections] = useState<string[]>(["hero", "rsvp"]);
   const [saving, setSaving] = useState(false);
 
@@ -42,11 +41,12 @@ const AddTemplate: React.FC = () => {
         slug,
         name,
         category,
+        packageCode,
         tags: tags.split(",").map((item) => item.trim()).filter(Boolean),
-        isPremium: !isFree,
-        price: isFree ? 0 : priceUsd,
-        priceUsd: isFree ? 0 : priceUsd,
-        priceEur: isFree ? 0 : priceEur,
+        isPremium: true,
+        price: priceUsd,
+        priceUsd,
+        priceEur,
         isVisible: true,
         isFeatured: false,
       });
@@ -77,7 +77,7 @@ const AddTemplate: React.FC = () => {
             <div className="space-y-2"><Label>Slug</Label><Input value={slug} onChange={(event) => setSlug(event.target.value)} required /></div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Category</Label>
               <Select value={category} onValueChange={setCategory}>
@@ -89,25 +89,29 @@ const AddTemplate: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>Package</Label>
+              <Select value={packageCode} onValueChange={(value) => setPackageCode(value as "package_a" | "package_b")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="package_a">Package A</SelectItem>
+                  <SelectItem value="package_b">Package B</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2"><Label>Tags</Label><Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="elegant, gold, premium" /></div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2"><Switch checked={isFree} onCheckedChange={setIsFree} /><Label>Free template</Label></div>
-          </div>
-
-          {!isFree && (
-            <div className="grid grid-cols-2 gap-4 max-w-xl">
-              <div className="space-y-2">
-                <Label>USD Price (cents)</Label>
-                <Input type="number" value={priceUsd} onChange={(event) => setPriceUsd(Number(event.target.value))} />
-              </div>
-              <div className="space-y-2">
-                <Label>EUR Price (cents)</Label>
-                <Input type="number" value={priceEur} onChange={(event) => setPriceEur(Number(event.target.value))} />
-              </div>
+          <div className="grid grid-cols-2 gap-4 max-w-xl">
+            <div className="space-y-2">
+              <Label>USD Price (cents)</Label>
+              <Input type="number" value={priceUsd} onChange={(event) => setPriceUsd(Number(event.target.value))} />
             </div>
-          )}
+            <div className="space-y-2">
+              <Label>EUR Price (cents)</Label>
+              <Input type="number" value={priceEur} onChange={(event) => setPriceEur(Number(event.target.value))} />
+            </div>
+          </div>
 
           <div className="space-y-2">
             <Label>Supported Sections</Label>
